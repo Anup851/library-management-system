@@ -1,0 +1,98 @@
+Build a FULLY WORKING Student Management System (SMS) as a production-style web app in ONE Replit project.
+
+Tech stack (must follow):
+- Frontend: React + Vite + TailwindCSS
+- Backend: Node.js + Express
+- Database: SQLite (using Prisma ORM)
+- Auth: JWT + bcrypt (role-based: ADMIN, TEACHER, STUDENT)
+- API Docs: Swagger (OpenAPI) at /api-docs
+- Validation: Zod (server side validation)
+- Logging: morgan
+- Error handling: centralized error middleware
+
+Core modules (must be fully implemented end-to-end with UI + API + DB):
+1) Authentication
+   - Register (admin only can create users)
+   - Login (email + password)
+   - Logout (client side)
+   - Protected routes
+   - Roles + permissions enforced on backend
+
+2) Students
+   - CRUD: create, list, view, edit, delete
+   - Fields: rollNo (unique), name, email, phone, gender, dob, address, classId, section, admissionDate, status(active/inactive)
+   - Search + filter (classId, section, status) + pagination
+   - Export to CSV
+
+3) Classes
+   - CRUD: className, section(s), classTeacherId
+   - View class-wise students list
+
+4) Subjects
+   - CRUD: subjectName, code, classId
+
+5) Attendance
+   - Mark attendance per class per date (Present/Absent/Late)
+   - Edit attendance for a date
+   - Attendance summary per student and per class (monthly)
+
+6) Exams & Marks
+   - Create exam: title, classId, dateRange
+   - Enter marks per subject per student
+   - Calculate total + percentage + grade
+   - Download student report card PDF (use a Node PDF library)
+
+7) Fees
+   - Fee structure per class
+   - Record fee payments per student: amount, date, method, receiptNo
+   - Fee due calculation
+
+8) Dashboard
+   - Admin dashboard stats: total students, attendance today %, fees collected this month, top absentees, upcoming exams
+   - Charts (Recharts)
+
+UI Requirements:
+- Clean modern UI with Tailwind
+- Sidebar navigation + topbar
+- Pages: Login, Dashboard, Students, Classes, Subjects, Attendance, Exams, Marks, Fees, Users
+- Form validations + toast notifications
+- Loading + empty states
+- Dark mode toggle
+
+Backend Requirements:
+- REST API with proper routes and controllers
+- Prisma schema for all entities + relations
+- Seed script: create default admin user:
+  email: admin@sms.com
+  password: Admin@123
+- Use environment variables for JWT secret
+- Must include CORS + Helmet security
+- Must include unit-like sanity tests for at least auth + students endpoints (can be minimal using supertest)
+
+Project Structure (must follow):
+/server
+  /src
+    /routes
+    /controllers
+    /middlewares
+    /services
+    /utils
+  prisma/schema.prisma
+  server.js
+/client
+  src/
+  vite config
+README.md
+
+Startup:
+- One command to run both client + server (use concurrently)
+- Provide clear README setup steps
+
+Deliverables:
+1) Complete codebase in this Replit project
+2) Working app with login and all modules functioning
+3) Swagger docs with example requests
+4) Seeded admin user
+5) No placeholders: implement real logic and database operations
+
+After generating, run the project and fix ALL errors until it works. Also add sample data seed for 2 classes, 10 students, 3 subjects.
