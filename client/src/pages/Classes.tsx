@@ -95,7 +95,7 @@ export default function Classes() {
           <div>Loading...</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {classes?.map((cls) => (
+            {classes?.map((cls: any) => (
               <Card key={cls.id} className="border-none shadow-md hover:shadow-xl transition-all duration-300">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-xl font-display">{cls.name}</CardTitle>

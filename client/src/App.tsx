@@ -11,7 +11,6 @@ import Students from "@/pages/Students";
 import Classes from "@/pages/Classes";
 import Attendance from "@/pages/Attendance";
 import Fees from "@/pages/Fees";
-import { Loader2 } from "lucide-react";
 
 // Protected Route Wrapper
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -21,7 +20,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   if (isLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
       </div>
     );
   }

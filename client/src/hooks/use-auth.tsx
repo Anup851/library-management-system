@@ -16,10 +16,12 @@ type AuthContextType = {
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
+const XANO_AUTH_BASE_URL = (import.meta.env.VITE_XANO_AUTH_URL as string | undefined)?.replace(/\/$/, "") || "/api";
+const authUrl = (path: string) => `${XANO_AUTH_BASE_URL}${path}`;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
-  const [location, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
 
   const {
     data: user,
@@ -27,12 +29,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoading,
     refetch,
   } = useQuery<User | null, Error>({
-    queryKey: ["/api/auth/me"],
+    queryKey: [authUrl("/auth/me")],
     queryFn: async () => {
       const token = localStorage.getItem("token");
       if (!token) return null;
       
-      const res = await fetch("/api/auth/me", {
+      const res = await fetch(authUrl("/auth/me"), {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.status === 401) {
@@ -46,7 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: z.infer<typeof api.auth.login.input>) => {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch(authUrl("/auth/login"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(credentials),
@@ -77,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const registerMutation = useMutation({
     mutationFn: async (newUser: InsertUser) => {
-      const res = await fetch("/api/auth/register", {
+      const res = await fetch(authUrl("/auth/register"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newUser),

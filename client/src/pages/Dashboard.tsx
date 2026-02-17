@@ -36,7 +36,7 @@ export default function Dashboard() {
 
   if (isLoading) return <div className="flex h-screen items-center justify-center">Loading...</div>;
 
-  const chartData = fees?.slice(0, 5).map(fee => ({
+  const chartData = fees?.slice(0, 5).map((fee: any) => ({
     name: format(new Date(fee.paymentDate || new Date()), "MMM dd"),
     amount: Number(fee.amount)
   })) || [];
@@ -120,7 +120,7 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent className="p-0">
                 <div className="divide-y divide-border">
-                  {fees?.slice(0, 5).map((fee) => (
+                  {fees?.slice(0, 5).map((fee: any) => (
                     <div key={fee.id} className="p-4 flex items-center justify-between hover:bg-secondary/30 transition-colors">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold text-xs">

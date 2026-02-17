@@ -1,9 +1,8 @@
 import express, { type Request, Response, NextFunction } from "express";
+import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import "dotenv/config";
-
-
 
 
 const app = express();
@@ -63,9 +62,7 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  app.get("/api/health", (_req, res) => {
-    res.json({ ok: true, source: "xano-client" });
-  });
+  await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -79,15 +76,6 @@ app.use((req, res, next) => {
 
     return res.status(status).json({ message });
   });
-
-  if (process.env.NODE_ENV !== "production") {
-  app.use((req, res, next) => {
-    // Disable CSP in dev so Vite/React Fast Refresh works
-    res.removeHeader("Content-Security-Policy");
-    next();
-  });
-}
-
 
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
@@ -111,3 +99,4 @@ app.use((req, res, next) => {
     log(`serving on http://127.0.0.1:${port}`);
   });
 })();
+

@@ -129,7 +129,7 @@ export default function Students() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {classes?.map((cls) => (
+                              {classes?.map((cls: any) => (
                                 <SelectItem key={cls.id} value={cls.id.toString()}>
                                   {cls.name} - {cls.section}
                                 </SelectItem>
@@ -191,7 +191,7 @@ export default function Students() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Classes</SelectItem>
-                {classes?.map((cls) => (
+                {classes?.map((cls: any) => (
                   <SelectItem key={cls.id} value={cls.id.toString()}>
                     {cls.name} - {cls.section}
                   </SelectItem>

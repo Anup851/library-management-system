@@ -80,7 +80,7 @@ export default function Fees() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {students?.data.map((student) => (
+                            {students?.data.map((student: any) => (
                               <SelectItem key={student.id} value={student.id.toString()}>
                                 {student.name} ({student.rollNo})
                               </SelectItem>
@@ -180,7 +180,7 @@ export default function Fees() {
               ) : fees?.length === 0 ? (
                 <TableRow><TableCell colSpan={6} className="text-center p-8 text-muted-foreground">No records found</TableCell></TableRow>
               ) : (
-                fees?.map((fee) => (
+                fees?.map((fee: any) => (
                   <TableRow key={fee.id} className="hover:bg-muted/50">
                     <TableCell className="font-mono text-xs">{fee.receiptNo}</TableCell>
                     <TableCell className="font-medium">{fee.student?.name}</TableCell>

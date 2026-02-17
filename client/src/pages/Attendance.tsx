@@ -33,7 +33,7 @@ export default function Attendance() {
     if (!selectedClass) return;
     
     // Combine existing report data with local changes
-    const records = attendanceReport?.map(record => ({
+    const records = attendanceReport?.map((record: any) => ({
       studentId: record.student.id,
       status: localStatuses[record.student.id] || record.status as "PRESENT" | "ABSENT" | "LATE"
     })) || [];
@@ -74,7 +74,7 @@ export default function Attendance() {
                     <SelectValue placeholder="Select Class" />
                   </SelectTrigger>
                   <SelectContent>
-                    {classes?.map((cls) => (
+                    {classes?.map((cls: any) => (
                       <SelectItem key={cls.id} value={cls.id.toString()}>
                         {cls.name} - {cls.section}
                       </SelectItem>
@@ -127,7 +127,7 @@ export default function Attendance() {
                    <div className="p-8 text-center text-muted-foreground">No students found in this class</div>
                  ) : (
                    <div className="grid grid-cols-1 gap-4">
-                     {attendanceReport.map((record) => {
+                     {attendanceReport.map((record: any) => {
                        const currentStatus = localStatuses[record.student.id] || record.status;
                        return (
                          <div key={record.student.id} className="flex items-center justify-between p-4 bg-secondary/20 rounded-lg border border-border/50">
