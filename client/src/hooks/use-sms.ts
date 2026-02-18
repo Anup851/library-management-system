@@ -14,6 +14,9 @@ type Resource = "student" | "class" | "subject" | "attendance" | "exam" | "mark"
 
 const XANO_SMS_BASE_URL =
   (import.meta.env.VITE_XANO_SMS_URL as string | undefined)?.replace(/\/$/, "") || "";
+const RESOURCE_CACHE_TTL_MS = 15000;
+const RESOURCE_CACHE = new Map<string, { ts: number; data: AnyRecord[] }>();
+let smsRateLimitedUntil = 0;
 
 function getAuthHeaders(includeJson = false) {
   const headers: Record<string, string> = {};
@@ -24,14 +27,53 @@ function getAuthHeaders(includeJson = false) {
   return headers;
 }
 
+const camelToSnake = (key: string) => key.replace(/[A-Z]/g, (m) => `_${m.toLowerCase()}`);
+
+function withSnakeAliases(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(withSnakeAliases);
+  }
+  if (value && typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const [key, v] of Object.entries(obj)) {
+      const normalizedValue = withSnakeAliases(v);
+      out[key] = normalizedValue;
+      const snake = camelToSnake(key);
+      if (!(snake in out)) {
+        out[snake] = normalizedValue;
+      }
+    }
+    return out;
+  }
+  return value;
+}
+
 async function xanoRequest(method: "GET" | "POST" | "PATCH" | "DELETE", path: string, body?: unknown) {
+  if (Date.now() < smsRateLimitedUntil) {
+    throw new Error("Rate limited by Xano. Please wait a moment and retry.");
+  }
+
+  const payload = body ? withSnakeAliases(body) : undefined;
   const res = await fetch(`${XANO_SMS_BASE_URL}${path}`, {
     method,
     headers: getAuthHeaders(Boolean(body)),
-    body: body ? JSON.stringify(body) : undefined,
+    body: payload ? JSON.stringify(payload) : undefined,
   });
 
-  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  if (!res.ok) {
+    if (res.status === 429) {
+      smsRateLimitedUntil = Date.now() + 60000;
+      throw new Error("Rate limited by Xano. Please wait 1 minute and try again.");
+    }
+    const raw = await res.text();
+    throw new Error(raw || `Request failed (${res.status})`);
+  }
+
+  if (method !== "GET") {
+    RESOURCE_CACHE.clear();
+  }
+
   if (res.status === 204) return null;
   const text = await res.text();
   return text ? JSON.parse(text) : null;
@@ -47,9 +89,33 @@ function normalizeRecord(record: AnyRecord): AnyRecord {
 }
 
 async function list(resource: Resource): Promise<AnyRecord[]> {
+  const cacheKey = `${XANO_SMS_BASE_URL}:${resource}`;
+  const cached = RESOURCE_CACHE.get(cacheKey);
+  if (cached && Date.now() - cached.ts < RESOURCE_CACHE_TTL_MS) {
+    return cached.data;
+  }
+
   const data = await xanoRequest("GET", `/${resource}`);
-  if (!Array.isArray(data)) return [];
-  return data.map(normalizeRecord);
+  let rows: AnyRecord[] = [];
+
+  if (Array.isArray(data)) {
+    rows = data as AnyRecord[];
+  } else if (data && typeof data === "object") {
+    const wrapped = data as AnyRecord;
+    const candidates = [
+      wrapped.items,
+      wrapped.data,
+      wrapped.result,
+      wrapped.records,
+      wrapped[resource],
+    ];
+    const firstArray = candidates.find((c) => Array.isArray(c));
+    if (Array.isArray(firstArray)) rows = firstArray as AnyRecord[];
+  }
+
+  const normalized = rows.map(normalizeRecord);
+  RESOURCE_CACHE.set(cacheKey, { ts: Date.now(), data: normalized });
+  return normalized;
 }
 
 async function getById(resource: Resource, id: number): Promise<AnyRecord | null> {
@@ -65,6 +131,57 @@ function firstDefined<T = any>(obj: AnyRecord, keys: string[], fallback?: T): T 
   return fallback;
 }
 
+function toNumericId(value: unknown): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "string") {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  }
+  if (value && typeof value === "object") {
+    const nested = firstDefined(value as AnyRecord, [
+      "id",
+      "classId",
+      "studentId",
+      "subjectId",
+      "examId",
+      "markId",
+      "feeId",
+      "attendanceId",
+      "class_id",
+      "student_id",
+      "subject_id",
+      "exam_id",
+      "mark_id",
+      "fee_id",
+      "attendance_id",
+    ]);
+    return toNumericId(nested);
+  }
+  return 0;
+}
+
+function readId(obj: AnyRecord, keys: string[]): number {
+  return toNumericId(firstDefined(obj, keys));
+}
+
+function getRollNo(obj: AnyRecord): string {
+  const value = firstDefined(obj, ["rollNo", "rollno", "rollNumber", "roll_number", "roll", "admissionNo"], "");
+  return String(value || "");
+}
+
+function getStudentName(obj: AnyRecord): string {
+  const value = firstDefined(obj, ["name", "fullName", "full_name", "studentName", "student_name"], "");
+  return String(value || "");
+}
+
+function normalizeDateOnly(value: unknown): string {
+  const str = String(value || "");
+  if (!str) return "";
+  if (str.includes("T")) return str.slice(0, 10);
+  if (str.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
+  return str;
+}
+
 // === STUDENTS ===
 export function useStudents(params?: { classId?: number; search?: string }) {
   return useQuery({
@@ -75,15 +192,15 @@ export function useStudents(params?: { classId?: number; search?: string }) {
 
       const classesById = new Map<number, AnyRecord>();
       for (const c of classesRaw) {
-        const classId = Number(firstDefined(c, ["id", "classId"], 0));
+        const classId = readId(c, ["id", "classId", "class", "class_id"]);
         if (classId) classesById.set(classId, c);
       }
 
       const filtered = studentsRaw
         .filter((s) => {
-          const studentClassId = Number(firstDefined(s, ["classId", "class"], 0));
-          const name = String(firstDefined(s, ["name"], "") || "").toLowerCase();
-          const rollNo = String(firstDefined(s, ["rollNo", "rollno"], "") || "").toLowerCase();
+          const studentClassId = readId(s, ["classId", "class", "class_id"]);
+          const name = getStudentName(s).toLowerCase();
+          const rollNo = getRollNo(s).toLowerCase();
 
           const classOk = !params?.classId || studentClassId === params.classId;
           const searchText = params?.search?.toLowerCase();
@@ -91,15 +208,16 @@ export function useStudents(params?: { classId?: number; search?: string }) {
           return classOk && searchOk;
         })
         .map((s) => {
-          const studentClassId = Number(firstDefined(s, ["classId", "class"], 0));
+          const studentClassId = readId(s, ["classId", "class", "class_id"]);
           const cls = classesById.get(studentClassId);
           return {
             ...s,
+            name: getStudentName(s),
             classId: studentClassId,
-            rollNo: firstDefined(s, ["rollNo", "rollno"], ""),
+            rollNo: getRollNo(s),
             class: cls
               ? {
-                  id: Number(firstDefined(cls, ["id", "classId"], 0)),
+                  id: readId(cls, ["id", "classId", "class", "class_id"]),
                   name: firstDefined(cls, ["name"], ""),
                   section: firstDefined(cls, ["section"], ""),
                 }
@@ -123,7 +241,18 @@ export function useStudent(id: number) {
 export function useCreateStudent() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: InsertStudent) => xanoRequest("POST", "/student", data),
+    mutationFn: async (data: InsertStudent) =>
+      xanoRequest("POST", "/student", {
+        ...data,
+        name: data.name,
+        fullName: data.name,
+        full_name: data.name,
+        rollNo: (data as AnyRecord).rollNo,
+        roll_no: (data as AnyRecord).rollNo,
+        roll_number: (data as AnyRecord).rollNo,
+        classId: (data as AnyRecord).classId,
+        class_id: (data as AnyRecord).classId,
+      }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["xano", "students"] }),
   });
 }
@@ -132,7 +261,25 @@ export function useUpdateStudent() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...data }: { id: number } & Partial<InsertStudent>) =>
-      xanoRequest("PATCH", `/student/${id}`, data),
+      xanoRequest("PATCH", `/student/${id}`, {
+        ...data,
+        name: (data as AnyRecord).name,
+        fullName: (data as AnyRecord).name,
+        full_name: (data as AnyRecord).name,
+        rollNo: (data as AnyRecord).rollNo,
+        roll_no: (data as AnyRecord).rollNo,
+        roll_number: (data as AnyRecord).rollNo,
+        classId: (data as AnyRecord).classId,
+        class_id: (data as AnyRecord).classId,
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["xano", "students"] }),
+  });
+}
+
+export function useDeleteStudent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => xanoRequest("DELETE", `/student/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["xano", "students"] }),
   });
 }
@@ -146,8 +293,15 @@ export function useClasses() {
       const classesRaw = await list("class");
       return classesRaw.map((cls) => ({
         ...cls,
+        id: readId(cls, ["id", "classId", "class", "class_id"]),
+        name: String(firstDefined(cls, ["name", "className", "title"], "") || ""),
+        section: String(firstDefined(cls, ["section", "classSection"], "") || ""),
+        classTeacherId: readId(cls, ["classTeacherId", "class_teacher_id", "teacherId", "teacher_id"]),
+        classTeacherName: String(
+          firstDefined(cls, ["classTeacherName", "class_teacher_name", "teacherName", "teacher_name"], "") || "",
+        ),
         teacher: null,
-      }));
+      })).filter((cls) => cls.id > 0);
     },
   });
 }
@@ -155,8 +309,39 @@ export function useClasses() {
 export function useCreateClass() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: InsertClass) => xanoRequest("POST", "/class", data),
+    mutationFn: async (data: InsertClass) =>
+      xanoRequest("POST", "/class", {
+        ...data,
+        classTeacherId: (data as AnyRecord).classTeacherId,
+        class_teacher_id: (data as AnyRecord).classTeacherId,
+      }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["xano", "classes"] }),
+  });
+}
+
+export function useUpdateClass() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...data }: { id: number } & Partial<InsertClass>) =>
+      xanoRequest("PATCH", `/class/${id}`, {
+        ...data,
+        classTeacherId: (data as AnyRecord).classTeacherId,
+        class_teacher_id: (data as AnyRecord).classTeacherId,
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["xano", "classes"] }),
+  });
+}
+
+export function useDeleteClass() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => xanoRequest("DELETE", `/class/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["xano", "classes"] });
+      queryClient.invalidateQueries({ queryKey: ["xano", "students"] });
+      queryClient.invalidateQueries({ queryKey: ["xano", "subjects"] });
+      queryClient.invalidateQueries({ queryKey: ["xano", "exams"] });
+    },
   });
 }
 
@@ -170,30 +355,31 @@ export function useAttendanceReport(classId: number, date: string) {
       const studentsById = new Map<number, AnyRecord>();
 
       for (const s of studentsRaw) {
-        studentsById.set(Number(firstDefined(s, ["id", "studentId"], 0)), s);
+        studentsById.set(readId(s, ["id", "studentId", "student", "student_id"]), s);
       }
 
       const classStudents = studentsRaw
-        .filter((s) => Number(firstDefined(s, ["classId", "class"], 0)) === classId)
+        .filter((s) => readId(s, ["classId", "class", "class_id"]) === classId)
         .map((s) => ({
-          id: Number(firstDefined(s, ["id", "studentId"], 0)),
-          name: String(firstDefined(s, ["name"], "")),
-          rollNo: String(firstDefined(s, ["rollNo", "rollno"], "")),
+          id: readId(s, ["id", "studentId", "student", "student_id"]),
+          name: getStudentName(s),
+          rollNo: getRollNo(s),
         }));
 
       const reportMap = new Map<number, AnyRecord>();
+      const selectedDate = normalizeDateOnly(date);
       for (const rec of attendanceRaw) {
-        const recDate = String(firstDefined(rec, ["date", "attendanceDate"], ""));
-        const recClass = Number(firstDefined(rec, ["classId", "class"], 0));
-        if (recDate !== date || recClass !== classId) continue;
-        const sid = Number(firstDefined(rec, ["studentId", "student"], 0));
+        const recDate = normalizeDateOnly(firstDefined(rec, ["date", "attendanceDate", "attendance_date", "day"], ""));
+        const recClass = readId(rec, ["classId", "class", "class_id"]);
+        if (recDate !== selectedDate || recClass !== classId) continue;
+        const sid = readId(rec, ["studentId", "student", "student_id"]);
         const st = studentsById.get(sid);
         reportMap.set(sid, {
           ...rec,
           student: {
             id: sid,
-            name: String(firstDefined(st || {}, ["name"], "")),
-            rollNo: String(firstDefined(st || {}, ["rollNo", "rollno"], "")),
+            name: getStudentName(st || {}),
+            rollNo: getRollNo(st || {}),
           },
           status: String(firstDefined(rec, ["status"], "ABSENT")),
         });
@@ -218,16 +404,33 @@ export function useAttendanceReport(classId: number, date: string) {
 export function useMarkAttendance() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: z.infer<typeof api.attendance.mark.input>) => {
+    mutationFn: async (data: {
+      classId: number;
+      date: string;
+      records: Array<{
+        studentId: number;
+        status: "PRESENT" | "ABSENT" | "LATE";
+        id?: number | string;
+      }>;
+    }) => {
       await Promise.all(
-        data.records.map((record) =>
-          xanoRequest("POST", "/attendance", {
+        data.records.map((record) => {
+          const attendanceId = toNumericId(record.id);
+          if (attendanceId > 0) {
+            return xanoRequest("PATCH", `/attendance/${attendanceId}`, {
+              classId: data.classId,
+              studentId: record.studentId,
+              status: record.status,
+              date: data.date,
+            });
+          }
+          return xanoRequest("POST", "/attendance", {
             classId: data.classId,
             studentId: record.studentId,
             status: record.status,
             date: data.date,
-          }),
-        ),
+          });
+        }),
       );
       return { message: "Attendance marked" };
     },
@@ -235,6 +438,17 @@ export function useMarkAttendance() {
       queryClient.invalidateQueries({
         queryKey: ["xano", "attendance", "report", variables.classId, variables.date],
       });
+      queryClient.invalidateQueries({ queryKey: ["xano", "dashboard", "stats"] });
+    },
+  });
+}
+
+export function useDeleteAttendance() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => xanoRequest("DELETE", `/attendance/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["xano", "attendance"] });
       queryClient.invalidateQueries({ queryKey: ["xano", "dashboard", "stats"] });
     },
   });
@@ -248,7 +462,7 @@ export function useExams(classId?: number) {
     queryFn: async () => {
       const exams = await list("exam");
       if (!classId) return exams;
-      return exams.filter((exam) => Number(firstDefined(exam, ["classId", "class"], 0)) === classId);
+      return exams.filter((exam) => readId(exam, ["classId", "class", "class_id"]) === classId);
     },
   });
 }
@@ -257,6 +471,14 @@ export function useCreateExam() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: InsertExam) => xanoRequest("POST", "/exam", data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["xano", "exams"] }),
+  });
+}
+
+export function useDeleteExam() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => xanoRequest("DELETE", `/exam/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["xano", "exams"] }),
   });
 }
@@ -291,21 +513,25 @@ export function useFees() {
       const [feesRaw, studentsRaw] = await Promise.all([list("fee"), list("student")]);
       const studentsById = new Map<number, AnyRecord>();
       for (const s of studentsRaw) {
-        studentsById.set(Number(firstDefined(s, ["id", "studentId"], 0)), s);
+        studentsById.set(readId(s, ["id", "studentId", "student", "student_id"]), s);
       }
 
       return feesRaw.map((fee) => {
-        const studentId = Number(firstDefined(fee, ["studentId", "student"], 0));
+        const studentId = readId(fee, ["studentId", "student", "student_id"]);
         const student = studentsById.get(studentId);
         return {
           ...fee,
           studentId,
-          paymentDate: firstDefined(fee, ["paymentDate", "date"], null),
+          paymentDate: firstDefined(
+            fee,
+            ["paymentDate", "payment_date", "date", "paidOn", "paid_on", "paymentDay", "day", "createdAt", "created_at"],
+            null,
+          ),
           student: student
             ? {
                 id: studentId,
-                name: firstDefined(student, ["name"], ""),
-                rollNo: firstDefined(student, ["rollNo", "rollno"], ""),
+                name: getStudentName(student),
+                rollNo: getRollNo(student),
               }
             : null,
         };
@@ -325,19 +551,36 @@ export function useCreateFee() {
   });
 }
 
+export function useDeleteFee() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => xanoRequest("DELETE", `/fee/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["xano", "fees"] });
+      queryClient.invalidateQueries({ queryKey: ["xano", "dashboard", "stats"] });
+    },
+  });
+}
+
 // === DASHBOARD ===
 export function useDashboardStats() {
   return useQuery({
     queryKey: ["xano", "dashboard", "stats"],
     enabled: !!XANO_SMS_BASE_URL,
+    staleTime: 60000,
+    refetchOnWindowFocus: false,
     queryFn: async () => {
       const [students, attendance, fees] = await Promise.all([list("student"), list("attendance"), list("fee")]);
-      const today = new Date().toISOString().slice(0, 10);
+      const now = new Date();
+      const todayLocal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      const todayUtc = now.toISOString().slice(0, 10);
 
       const presentToday = attendance.filter((a) => {
-        const date = String(firstDefined(a, ["date", "attendanceDate"], ""));
-        const status = String(firstDefined(a, ["status"], "")).toUpperCase();
-        return date === today && status === "PRESENT";
+        const rawDate = firstDefined(a, ["date", "attendanceDate", "attendance_date", "day", "createdAt", "created_at"], "");
+        const date = normalizeDateOnly(rawDate);
+        const status = String(firstDefined(a, ["status", "attendanceStatus", "attendance_status"], "")).trim().toUpperCase();
+        const isPresent = status === "PRESENT" || status === "P" || status === "1" || status === "TRUE";
+        return isPresent && (date === todayLocal || date === todayUtc);
       }).length;
 
       const feesCollected = fees.reduce((sum, fee) => sum + Number(firstDefined(fee, ["amount"], 0) || 0), 0);
@@ -357,9 +600,29 @@ export function useSubjects(classId?: number) {
     queryKey: ["xano", "subjects", classId],
     enabled: !!XANO_SMS_BASE_URL,
     queryFn: async () => {
-      const subjects = await list("subject");
+      const subjectsRaw = await list("subject");
+      const subjects = subjectsRaw.map((s) => ({
+        ...s,
+        id: readId(s, ["id", "subjectId", "subject", "subject_id"]),
+        classId: readId(s, ["classId", "class", "class_id"]),
+        subjectTeacherId: readId(s, [
+          "subjectTeacherId",
+          "subject_teacher_id",
+          "teacherId",
+          "teacher_id",
+          "facultyId",
+          "faculty_id",
+        ]),
+        subjectTeacherName: String(
+          firstDefined(
+            s,
+            ["subjectTeacherName", "subject_teacher_name", "teacherName", "teacher_name", "facultyName", "faculty_name"],
+            "",
+          ) || "",
+        ),
+      }));
       if (!classId) return subjects;
-      return subjects.filter((s) => Number(firstDefined(s, ["classId", "class"], 0)) === classId);
+      return subjects.filter((s) => s.classId === classId);
     },
   });
 }
@@ -367,7 +630,20 @@ export function useSubjects(classId?: number) {
 export function useCreateSubject() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: InsertSubject) => xanoRequest("POST", "/subject", data),
+    mutationFn: async (data: InsertSubject & { subjectTeacherId?: number }) =>
+      xanoRequest("POST", "/subject", {
+        ...data,
+        subjectTeacherId: (data as AnyRecord).subjectTeacherId,
+        subject_teacher_id: (data as AnyRecord).subjectTeacherId,
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["xano", "subjects"] }),
+  });
+}
+
+export function useDeleteSubject() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => xanoRequest("DELETE", `/subject/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["xano", "subjects"] }),
   });
 }

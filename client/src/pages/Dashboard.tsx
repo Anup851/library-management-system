@@ -33,11 +33,23 @@ function StatCard({ title, value, icon: Icon, color, delay }: any) {
 export default function Dashboard() {
   const { data: stats, isLoading } = useDashboardStats();
   const { data: fees } = useFees();
+  const formatSafeDate = (value: unknown, fallback = "N/A") => {
+    if (!value) return fallback;
+    const d = new Date(String(value));
+    if (Number.isNaN(d.getTime())) return fallback;
+    return format(d, "MMM dd, yyyy");
+  };
+  const formatSafeShortDate = (value: unknown) => {
+    if (!value) return format(new Date(), "MMM dd");
+    const d = new Date(String(value));
+    if (Number.isNaN(d.getTime())) return format(new Date(), "MMM dd");
+    return format(d, "MMM dd");
+  };
 
   if (isLoading) return <div className="flex h-screen items-center justify-center">Loading...</div>;
 
   const chartData = fees?.slice(0, 5).map((fee: any) => ({
-    name: format(new Date(fee.paymentDate || new Date()), "MMM dd"),
+    name: formatSafeShortDate(fee.paymentDate),
     amount: Number(fee.amount)
   })) || [];
 
@@ -128,7 +140,7 @@ export default function Dashboard() {
                         </div>
                         <div>
                           <p className="text-sm font-medium text-foreground">{fee.method}</p>
-                          <p className="text-xs text-muted-foreground">{format(new Date(fee.paymentDate!), "MMM dd, yyyy")}</p>
+                          <p className="text-xs text-muted-foreground">{formatSafeDate(fee.paymentDate)}</p>
                         </div>
                       </div>
                       <span className="font-bold text-emerald-600">+${fee.amount}</span>

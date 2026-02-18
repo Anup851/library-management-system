@@ -2,7 +2,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { useFees, useCreateFee, useStudents } from "@/hooks/use-sms";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useForm } from "react-hook-form";
@@ -64,6 +64,7 @@ export default function Fees() {
             <DialogContent className="sm:max-w-[500px]">
               <DialogHeader>
                 <DialogTitle>New Fee Payment</DialogTitle>
+                <DialogDescription>Record a fee payment for a student.</DialogDescription>
               </DialogHeader>
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -99,7 +100,14 @@ export default function Fees() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Amount</FormLabel>
-                          <FormControl><Input type="number" placeholder="0.00" {...field} /></FormControl>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              placeholder="0.00"
+                              {...field}
+                              value={field.value ?? ""}
+                            />
+                          </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}

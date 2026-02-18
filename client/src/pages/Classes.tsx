@@ -1,8 +1,9 @@
 import { Sidebar } from "@/components/Sidebar";
-import { useClasses, useCreateClass } from "@/hooks/use-sms";
+import { useClasses, useCreateClass, useUpdateClass, useDeleteClass } from "@/hooks/use-sms";
+import { useXanoMyTeamMembers } from "@/hooks/use-xano-account";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useForm } from "react-hook-form";
@@ -10,14 +11,20 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { insertClassSchema } from "@shared/schema";
 import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Plus, School, Loader2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Plus, School, Loader2, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function Classes() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedTeacherByClass, setSelectedTeacherByClass] = useState<Record<number, string>>({});
   const { data: classes, isLoading } = useClasses();
   const createClass = useCreateClass();
+  const updateClass = useUpdateClass();
+  const deleteClass = useDeleteClass();
+  const { data: teamMembersRaw } = useXanoMyTeamMembers();
+  const teamMembers = Array.isArray(teamMembersRaw) ? teamMembersRaw as any[] : [];
 
   const form = useForm<z.infer<typeof insertClassSchema>>({
     resolver: zodResolver(insertClassSchema),
@@ -35,6 +42,25 @@ export default function Classes() {
         form.reset();
       }
     });
+  };
+
+  const getTeacherIdFromClass = (cls: any) =>
+    Number(cls?.classTeacherId || cls?.class_teacher_id || cls?.teacherId || 0) || undefined;
+
+  const getTeacherName = (cls: any) => {
+    const teacherId = getTeacherIdFromClass(cls);
+    const matched = teamMembers.find((m) => Number(m?.id) === teacherId);
+    return matched?.name || cls?.classTeacherName || cls?.teacher_name || (teacherId ? `User #${teacherId}` : "Not Assigned");
+  };
+
+  const assignTeacher = (cls: any) => {
+    const rawValue = selectedTeacherByClass[Number(cls.id)] ?? String(getTeacherIdFromClass(cls) || "none");
+    const teacherId = rawValue === "none" ? undefined : Number(rawValue);
+
+    updateClass.mutate({
+      id: Number(cls.id),
+      classTeacherId: teacherId,
+    } as any);
   };
 
   return (
@@ -56,6 +82,7 @@ export default function Classes() {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Create New Class</DialogTitle>
+                <DialogDescription>Provide class name and section to add a new class.</DialogDescription>
               </DialogHeader>
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -77,6 +104,34 @@ export default function Classes() {
                       <FormItem>
                         <FormLabel>Section</FormLabel>
                         <FormControl><Input placeholder="A" {...field} /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                      )}
+                    />
+                  <FormField
+                    control={form.control}
+                    name="classTeacherId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Class Teacher</FormLabel>
+                        <Select
+                          onValueChange={(val) => field.onChange(val === "none" ? undefined : Number(val))}
+                          value={field.value ? String(field.value) : "none"}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select Teacher" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="none">Not Assigned</SelectItem>
+                            {teamMembers.map((member: any) => (
+                              <SelectItem key={member.id} value={String(member.id)}>
+                                {member.name || member.email || `User #${member.id}`}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -111,8 +166,48 @@ export default function Classes() {
                   <div className="pt-4 border-t border-border/50">
                     <p className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Class Teacher</p>
                     <p className="text-sm font-medium mt-1">
-                      {cls.teacher ? cls.teacher.name : "Not Assigned"}
+                      {getTeacherName(cls)}
                     </p>
+                    <div className="mt-3 flex items-center gap-2">
+                      <Select
+                        value={selectedTeacherByClass[Number(cls.id)] ?? String(getTeacherIdFromClass(cls) || "none")}
+                        onValueChange={(val) =>
+                          setSelectedTeacherByClass((prev) => ({ ...prev, [Number(cls.id)]: val }))
+                        }
+                      >
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder="Assign teacher" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Not Assigned</SelectItem>
+                          {teamMembers.map((member: any) => (
+                            <SelectItem key={member.id} value={String(member.id)}>
+                              {member.name || member.email || `User #${member.id}`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={updateClass.isPending}
+                        onClick={() => assignTeacher(cls)}
+                      >
+                        {updateClass.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Assign"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                        disabled={deleteClass.isPending}
+                        onClick={() => {
+                          if (!confirm(`Delete class "${cls.name}"?`)) return;
+                          deleteClass.mutate(Number(cls.id));
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

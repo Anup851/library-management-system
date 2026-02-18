@@ -1,10 +1,8 @@
 import { createContext, ReactNode, useContext } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { User, InsertUser } from "@shared/schema";
-import { api } from "@shared/routes";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import { z } from "zod";
 
 type AuthContextType = {
   user: User | null;
@@ -18,6 +16,7 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType | null>(null);
 const XANO_AUTH_BASE_URL = (import.meta.env.VITE_XANO_AUTH_URL as string | undefined)?.replace(/\/$/, "") || "/api";
 const authUrl = (path: string) => `${XANO_AUTH_BASE_URL}${path}`;
+let authRateLimitedUntil = 0;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
@@ -31,12 +30,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   } = useQuery<User | null, Error>({
     queryKey: [authUrl("/auth/me")],
     queryFn: async () => {
+      if (Date.now() < authRateLimitedUntil) {
+        throw new Error("Auth temporarily rate-limited. Please wait and retry.");
+      }
       const token = localStorage.getItem("token");
       if (!token) return null;
       
       const res = await fetch(authUrl("/auth/me"), {
         headers: { Authorization: `Bearer ${token}` }
       });
+      if (res.status === 429) {
+        authRateLimitedUntil = Date.now() + 60000;
+        throw new Error("Too many auth requests. Please wait 1 minute.");
+      }
       if (res.status === 401) {
         localStorage.removeItem("token");
         return null;
@@ -47,31 +53,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const loginMutation = useMutation({
-    mutationFn: async (credentials: z.infer<typeof api.auth.login.input>) => {
+    mutationFn: async (credentials: { email: string; password: string }) => {
+      if (Date.now() < authRateLimitedUntil) {
+        throw new Error("Too many login attempts. Wait 1 minute and try again.");
+      }
       const res = await fetch(authUrl("/auth/login"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(credentials),
       });
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Login failed");
+        if (res.status === 429) {
+          authRateLimitedUntil = Date.now() + 60000;
+          throw new Error("Too many login attempts. Wait 1 minute and try again.");
+        }
+        const raw = await res.text();
+        let message = `Login failed (${res.status})`;
+        try {
+          const parsed = JSON.parse(raw);
+          message =
+            parsed?.message ||
+            parsed?.error ||
+            parsed?.error_message ||
+            message;
+        } catch {
+          if (raw) message = raw;
+        }
+        throw new Error(message);
       }
       return await res.json();
     },
     onSuccess: (data) => {
-      localStorage.setItem("token", data.token);
+      const token = data?.authToken || data?.token;
+      if (!token) {
+        throw new Error("Login succeeded but no auth token was returned");
+      }
+      localStorage.setItem("token", token);
       refetch();
       setLocation("/");
       toast({
         title: "Welcome back!",
-        description: `Logged in as ${data.user.username}`,
+        description: "You are now signed in.",
       });
     },
     onError: (error: Error) => {
+      const isRateLimit = /429|rate limit|too many/i.test(error.message);
       toast({
         title: "Login failed",
-        description: error.message,
+        description: isRateLimit
+          ? "Too many login attempts. Wait 1-2 minutes, then try again."
+          : error.message,
         variant: "destructive",
       });
     },
@@ -79,10 +110,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const registerMutation = useMutation({
     mutationFn: async (newUser: InsertUser) => {
-      const res = await fetch(authUrl("/auth/register"), {
+      const res = await fetch(authUrl("/auth/signup"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newUser),
+        body: JSON.stringify({
+          name: newUser.name,
+          email: newUser.username,
+          password: newUser.password,
+        }),
       });
       if (!res.ok) {
         const error = await res.json();

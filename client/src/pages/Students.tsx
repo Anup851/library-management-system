@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
-import { useStudents, useCreateStudent, useClasses } from "@/hooks/use-sms";
+import { useStudents, useCreateStudent, useClasses, useDeleteStudent } from "@/hooks/use-sms";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger
 } from "@/components/ui/dialog";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
@@ -17,7 +17,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { insertStudentSchema } from "@shared/schema";
 import { z } from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Plus, Search, Filter, Loader2, User } from "lucide-react";
+import { Plus, Search, Filter, Loader2, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 export default function Students() {
@@ -32,6 +32,14 @@ export default function Students() {
   
   const { data: classes } = useClasses();
   const createStudent = useCreateStudent();
+  const deleteStudent = useDeleteStudent();
+  const classOptions = (classes || [])
+    .map((cls: any) => ({
+      id: Number(cls?.id),
+      name: cls?.name || cls?.className || "Class",
+      section: cls?.section || cls?.classSection || "",
+    }))
+    .filter((cls) => Number.isFinite(cls.id) && cls.id > 0);
 
   const form = useForm<z.infer<typeof insertStudentSchema>>({
     resolver: zodResolver(insertStudentSchema),
@@ -75,6 +83,7 @@ export default function Students() {
             <DialogContent className="sm:max-w-[500px]">
               <DialogHeader>
                 <DialogTitle>Enroll New Student</DialogTitle>
+                <DialogDescription>Enter student details and assign a class to create a new record.</DialogDescription>
               </DialogHeader>
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -129,7 +138,7 @@ export default function Students() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {classes?.map((cls: any) => (
+                              {classOptions.map((cls: any) => (
                                 <SelectItem key={cls.id} value={cls.id.toString()}>
                                   {cls.name} - {cls.section}
                                 </SelectItem>
@@ -191,7 +200,7 @@ export default function Students() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Classes</SelectItem>
-                {classes?.map((cls: any) => (
+                {classOptions.map((cls: any) => (
                   <SelectItem key={cls.id} value={cls.id.toString()}>
                     {cls.name} - {cls.section}
                   </SelectItem>
@@ -210,37 +219,55 @@ export default function Students() {
                 <TableHead>Class</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center">Loading...</TableCell>
+                  <TableCell colSpan={6} className="h-24 text-center">Loading...</TableCell>
                 </TableRow>
               ) : studentsData?.data.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                     No students found
                   </TableCell>
                 </TableRow>
               ) : (
                 studentsData?.data.map((student: any) => (
                   <TableRow key={student.id} className="hover:bg-muted/50 transition-colors">
-                    <TableCell className="font-medium font-mono text-xs">{student.rollNo}</TableCell>
+                    <TableCell className="font-medium font-mono text-xs">{student.rollNo || "-"}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">
-                          {student.name.charAt(0)}
+                          {(student.name || "U").charAt(0)}
                         </div>
-                        <span className="font-medium">{student.name}</span>
+                        <span className="font-medium">{student.name || "Unknown Student"}</span>
                       </div>
                     </TableCell>
-                    <TableCell>{student.class.name} ({student.class.section})</TableCell>
+                    <TableCell>
+                      {student.class?.name || "-"} {student.class?.section ? `(${student.class.section})` : ""}
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{student.email || "-"}</TableCell>
                     <TableCell>
                       <Badge variant={student.status === "ACTIVE" ? "default" : "secondary"} className={student.status === "ACTIVE" ? "bg-emerald-500 hover:bg-emerald-600" : ""}>
                         {student.status}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                        disabled={deleteStudent.isPending}
+                        onClick={() => {
+                          if (!confirm(`Delete student "${student.name || "Unknown Student"}"?`)) return;
+                          deleteStudent.mutate(Number(student.id));
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4 mr-1" />
+                        Delete
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))

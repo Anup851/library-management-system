@@ -34,6 +34,7 @@ export default function Attendance() {
     
     // Combine existing report data with local changes
     const records = attendanceReport?.map((record: any) => ({
+      id: record.id,
       studentId: record.student.id,
       status: localStatuses[record.student.id] || record.status as "PRESENT" | "ABSENT" | "LATE"
     })) || [];

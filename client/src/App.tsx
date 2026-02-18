@@ -1,4 +1,5 @@
 import { Switch, Route, useLocation } from "wouter";
+import { useEffect } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -11,11 +12,19 @@ import Students from "@/pages/Students";
 import Classes from "@/pages/Classes";
 import Attendance from "@/pages/Attendance";
 import Fees from "@/pages/Fees";
+import Subjects from "@/pages/Subjects";
+import Exams from "@/pages/Exams";
 
 // Protected Route Wrapper
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { user, isLoading } = useAuth();
   const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!isLoading && !user) {
+      setLocation("/auth/login");
+    }
+  }, [isLoading, user, setLocation]);
 
   if (isLoading) {
     return (
@@ -26,7 +35,6 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   }
 
   if (!user) {
-    setLocation("/auth/login");
     return null;
   }
 
@@ -48,6 +56,12 @@ function Router() {
       </Route>
       <Route path="/attendance">
         <ProtectedRoute component={Attendance} />
+      </Route>
+      <Route path="/subjects">
+        <ProtectedRoute component={Subjects} />
+      </Route>
+      <Route path="/exams">
+        <ProtectedRoute component={Exams} />
       </Route>
       <Route path="/fees">
         <ProtectedRoute component={Fees} />

@@ -9,7 +9,7 @@ import { z } from "zod";
 import { Loader2, GraduationCap } from "lucide-react";
 
 const loginSchema = z.object({
-  username: z.string().email("Invalid email address"),
+  email: z.string().email("Invalid email address"),
   password: z.string().min(1, "Password is required"),
 });
 
@@ -18,7 +18,7 @@ export default function AuthLogin() {
   
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { username: "", password: "" }
+    defaultValues: { email: "", password: "" }
   });
 
   const onSubmit = (data: z.infer<typeof loginSchema>) => {
@@ -42,7 +42,7 @@ export default function AuthLogin() {
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <FormField
                 control={form.control}
-                name="username"
+                name="email"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Email Address</FormLabel>

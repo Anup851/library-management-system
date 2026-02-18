@@ -27,6 +27,8 @@ const menuItems = [
 export function Sidebar() {
   const [location] = useLocation();
   const { logoutMutation, user } = useAuth();
+  const displayName = user?.name || user?.username || "User";
+  const displayInitial = displayName.charAt(0).toUpperCase();
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 bg-card border-r border-border flex flex-col z-30 hidden md:flex shadow-xl shadow-blue-900/5">
@@ -72,10 +74,10 @@ export function Sidebar() {
       <div className="p-4 border-t border-border/50 bg-secondary/30">
         <div className="flex items-center gap-3 mb-4 px-2">
           <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary to-blue-400 flex items-center justify-center text-white font-bold shadow-md">
-            {user?.username.charAt(0).toUpperCase()}
+            {displayInitial}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold truncate text-foreground">{user?.username}</p>
+            <p className="text-sm font-semibold truncate text-foreground">{displayName}</p>
             <p className="text-xs text-muted-foreground truncate capitalize">{user?.role?.toLowerCase()}</p>
           </div>
         </div>
