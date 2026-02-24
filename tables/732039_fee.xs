@@ -18,5 +18,9 @@ table fee {
   index = [
     {type: "primary", field: [{name: "id"}]}
     {type: "btree", field: [{name: "created_at", op: "desc"}]}
+    {
+      type : "btree|unique"
+      field: [{name: "receipt_no", op: "asc"}]
+    }
   ]
 }

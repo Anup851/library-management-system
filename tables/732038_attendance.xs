@@ -19,5 +19,9 @@ table attendance {
   index = [
     {type: "primary", field: [{name: "id"}]}
     {type: "btree", field: [{name: "created_at", op: "desc"}]}
+    {
+      type : "btree|unique"
+      field: [{name: "student_id", op: "asc"}, {name: "date", op: "asc"}]
+    }
   ]
 }

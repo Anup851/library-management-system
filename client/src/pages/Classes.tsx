@@ -15,8 +15,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, School, Loader2, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function Classes() {
+  const { isAdmin } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedTeacherByClass, setSelectedTeacherByClass] = useState<Record<number, string>>({});
   const { data: classes, isLoading } = useClasses();
@@ -72,78 +75,83 @@ export default function Classes() {
             <h1 className="text-3xl font-bold text-foreground font-display">Classes</h1>
             <p className="text-muted-foreground mt-1">Manage class sections and teachers</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-primary text-white shadow-lg shadow-primary/25">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Class
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create New Class</DialogTitle>
-                <DialogDescription>Provide class name and section to add a new class.</DialogDescription>
-              </DialogHeader>
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Class Name</FormLabel>
-                        <FormControl><Input placeholder="Class 10" {...field} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="section"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Section</FormLabel>
-                        <FormControl><Input placeholder="A" {...field} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                      )}
-                    />
-                  <FormField
-                    control={form.control}
-                    name="classTeacherId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Class Teacher</FormLabel>
-                        <Select
-                          onValueChange={(val) => field.onChange(val === "none" ? undefined : Number(val))}
-                          value={field.value ? String(field.value) : "none"}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select Teacher" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="none">Not Assigned</SelectItem>
-                            {teamMembers.map((member: any) => (
-                              <SelectItem key={member.id} value={String(member.id)}>
-                                {member.name || member.email || `User #${member.id}`}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <Button type="submit" className="w-full" disabled={createClass.isPending}>
-                    {createClass.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                    Create Class
+          <div className="flex items-center gap-3">
+            {!isAdmin && <Badge variant="secondary">Read-only</Badge>}
+            {isAdmin && (
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button className="bg-primary text-white shadow-lg shadow-primary/25">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Class
                   </Button>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Create New Class</DialogTitle>
+                    <DialogDescription>Provide class name and section to add a new class.</DialogDescription>
+                  </DialogHeader>
+                  <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="name"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Class Name</FormLabel>
+                            <FormControl><Input placeholder="Class 10" {...field} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="section"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Section</FormLabel>
+                            <FormControl><Input placeholder="A" {...field} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                          )}
+                        />
+                      <FormField
+                        control={form.control}
+                        name="classTeacherId"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Class Teacher</FormLabel>
+                            <Select
+                              onValueChange={(val) => field.onChange(val === "none" ? undefined : Number(val))}
+                              value={field.value ? String(field.value) : "none"}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select Teacher" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="none">Not Assigned</SelectItem>
+                                {teamMembers.map((member: any) => (
+                                  <SelectItem key={member.id} value={String(member.id)}>
+                                    {member.name || member.email || `User #${member.id}`}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <Button type="submit" className="w-full" disabled={createClass.isPending}>
+                        {createClass.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                        Create Class
+                      </Button>
+                    </form>
+                  </Form>
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
         </div>
 
         {isLoading ? (
@@ -169,44 +177,48 @@ export default function Classes() {
                       {getTeacherName(cls)}
                     </p>
                     <div className="mt-3 flex items-center gap-2">
-                      <Select
-                        value={selectedTeacherByClass[Number(cls.id)] ?? String(getTeacherIdFromClass(cls) || "none")}
-                        onValueChange={(val) =>
-                          setSelectedTeacherByClass((prev) => ({ ...prev, [Number(cls.id)]: val }))
-                        }
-                      >
-                        <SelectTrigger className="h-9">
-                          <SelectValue placeholder="Assign teacher" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Not Assigned</SelectItem>
-                          {teamMembers.map((member: any) => (
-                            <SelectItem key={member.id} value={String(member.id)}>
-                              {member.name || member.email || `User #${member.id}`}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={updateClass.isPending}
-                        onClick={() => assignTeacher(cls)}
-                      >
-                        {updateClass.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Assign"}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-destructive border-destructive/30 hover:bg-destructive/10"
-                        disabled={deleteClass.isPending}
-                        onClick={() => {
-                          if (!confirm(`Delete class "${cls.name}"?`)) return;
-                          deleteClass.mutate(Number(cls.id));
-                        }}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      {isAdmin && (
+                        <>
+                          <Select
+                            value={selectedTeacherByClass[Number(cls.id)] ?? String(getTeacherIdFromClass(cls) || "none")}
+                            onValueChange={(val) =>
+                              setSelectedTeacherByClass((prev) => ({ ...prev, [Number(cls.id)]: val }))
+                            }
+                          >
+                            <SelectTrigger className="h-9">
+                              <SelectValue placeholder="Assign teacher" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Not Assigned</SelectItem>
+                              {teamMembers.map((member: any) => (
+                                <SelectItem key={member.id} value={String(member.id)}>
+                                  {member.name || member.email || `User #${member.id}`}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={updateClass.isPending}
+                            onClick={() => assignTeacher(cls)}
+                          >
+                            {updateClass.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Assign"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                            disabled={deleteClass.isPending}
+                            onClick={() => {
+                              if (!confirm(`Delete class "${cls.name}"?`)) return;
+                              deleteClass.mutate(Number(cls.id));
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </CardContent>

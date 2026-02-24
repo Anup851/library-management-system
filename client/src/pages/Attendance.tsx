@@ -10,8 +10,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { CalendarIcon, CheckCircle2, XCircle, Clock, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function Attendance() {
+  const { isAdmin } = useAuth();
   const [date, setDate] = useState<Date>(new Date());
   const [selectedClass, setSelectedClass] = useState<string>("");
   const { toast } = useToast();
@@ -58,8 +61,13 @@ export default function Attendance() {
       <Sidebar />
       <main className="flex-1 md:ml-64 p-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground font-display">Attendance</h1>
-          <p className="text-muted-foreground mt-1">Mark and view daily attendance records</p>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-foreground font-display">Attendance</h1>
+              <p className="text-muted-foreground mt-1">Mark and view daily attendance records</p>
+            </div>
+            {!isAdmin && <Badge variant="secondary">Read-only</Badge>}
+          </div>
         </div>
 
         <div className="flex flex-col md:flex-row gap-4 mb-8 items-start">
@@ -116,10 +124,12 @@ export default function Attendance() {
                <div className="bg-card rounded-xl border border-border shadow-lg p-6">
                  <div className="flex items-center justify-between mb-6">
                    <h2 className="text-xl font-bold">Student List</h2>
-                   <Button onClick={saveAttendance} disabled={markAttendance.isPending} className="bg-primary hover:bg-primary/90 text-white">
-                     {markAttendance.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                     Save Attendance
-                   </Button>
+                   {isAdmin && (
+                     <Button onClick={saveAttendance} disabled={markAttendance.isPending} className="bg-primary hover:bg-primary/90 text-white">
+                       {markAttendance.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                       Save Attendance
+                     </Button>
+                   )}
                  </div>
 
                  {isLoading ? (
@@ -143,9 +153,11 @@ export default function Attendance() {
                            </div>
                            <div className="flex gap-2">
                              <button
-                               onClick={() => handleStatusChange(record.student.id, "PRESENT")}
+                               onClick={() => isAdmin && handleStatusChange(record.student.id, "PRESENT")}
+                               disabled={!isAdmin}
                                className={cn(
                                  "flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium transition-all",
+                                 !isAdmin && "opacity-60 cursor-not-allowed",
                                  currentStatus === "PRESENT" 
                                    ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/20" 
                                    : "bg-background text-muted-foreground hover:bg-secondary"
@@ -154,9 +166,11 @@ export default function Attendance() {
                                <CheckCircle2 className="w-4 h-4" /> Present
                              </button>
                              <button
-                               onClick={() => handleStatusChange(record.student.id, "ABSENT")}
+                               onClick={() => isAdmin && handleStatusChange(record.student.id, "ABSENT")}
+                               disabled={!isAdmin}
                                className={cn(
                                  "flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium transition-all",
+                                 !isAdmin && "opacity-60 cursor-not-allowed",
                                  currentStatus === "ABSENT" 
                                    ? "bg-red-500 text-white shadow-md shadow-red-500/20" 
                                    : "bg-background text-muted-foreground hover:bg-secondary"
@@ -165,9 +179,11 @@ export default function Attendance() {
                                <XCircle className="w-4 h-4" /> Absent
                              </button>
                              <button
-                               onClick={() => handleStatusChange(record.student.id, "LATE")}
+                               onClick={() => isAdmin && handleStatusChange(record.student.id, "LATE")}
+                               disabled={!isAdmin}
                                className={cn(
                                  "flex items-center gap-1 px-3 py-1.5 rounded-md text-sm font-medium transition-all",
+                                 !isAdmin && "opacity-60 cursor-not-allowed",
                                  currentStatus === "LATE" 
                                    ? "bg-amber-500 text-white shadow-md shadow-amber-500/20" 
                                    : "bg-background text-muted-foreground hover:bg-secondary"

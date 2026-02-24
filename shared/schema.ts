@@ -162,3 +162,4 @@ export type Mark = typeof marks.$inferSelect;
 export type InsertMark = z.infer<typeof insertMarkSchema>;
 export type Fee = typeof fees.$inferSelect;
 export type InsertFee = z.infer<typeof insertFeeSchema>;
+export type Role = "admin" | "student" | "parent";

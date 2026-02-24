@@ -15,8 +15,11 @@ import { Plus, Search, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { format } from "date-fns";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function Fees() {
+  const { isAdmin } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { data: fees, isLoading } = useFees();
   const { data: students } = useStudents();
@@ -54,120 +57,125 @@ export default function Fees() {
             <h1 className="text-3xl font-bold text-foreground font-display">Fees Collection</h1>
             <p className="text-muted-foreground mt-1">Track payments and manage fee records</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-primary text-white shadow-lg shadow-primary/25">
-                <Plus className="w-4 h-4 mr-2" />
-                Collect Fee
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-              <DialogHeader>
-                <DialogTitle>New Fee Payment</DialogTitle>
-                <DialogDescription>Record a fee payment for a student.</DialogDescription>
-              </DialogHeader>
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="studentId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Student</FormLabel>
-                        <Select onValueChange={(val) => field.onChange(Number(val))} value={field.value?.toString()}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select Student" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {students?.data.map((student: any) => (
-                              <SelectItem key={student.id} value={student.id.toString()}>
-                                {student.name} ({student.rollNo})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="amount"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Amount</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              placeholder="0.00"
-                              {...field}
-                              value={field.value ?? ""}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="method"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Payment Method</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value}>
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select Method" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="CASH">Cash</SelectItem>
-                              <SelectItem value="ONLINE">Online</SelectItem>
-                              <SelectItem value="CHEQUE">Cheque</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-
-                  <FormField
-                    control={form.control}
-                    name="receiptNo"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Receipt No</FormLabel>
-                        <FormControl><Input placeholder="R-1001" {...field} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="description"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Description</FormLabel>
-                        <FormControl><Input placeholder="Monthly Tuition Fee" {...field} value={field.value || ''} /></FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <Button type="submit" className="w-full" disabled={createFee.isPending}>
-                    {createFee.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                    Record Payment
+          <div className="flex items-center gap-3">
+            {!isAdmin && <Badge variant="secondary">Read-only</Badge>}
+            {isAdmin && (
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button className="bg-primary text-white shadow-lg shadow-primary/25">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Collect Fee
                   </Button>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[500px]">
+                  <DialogHeader>
+                    <DialogTitle>New Fee Payment</DialogTitle>
+                    <DialogDescription>Record a fee payment for a student.</DialogDescription>
+                  </DialogHeader>
+                  <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="studentId"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Student</FormLabel>
+                            <Select onValueChange={(val) => field.onChange(Number(val))} value={field.value?.toString()}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select Student" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {students?.data.map((student: any) => (
+                                  <SelectItem key={student.id} value={student.id.toString()}>
+                                    {student.name} ({student.rollNo})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="amount"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Amount</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="number"
+                                  placeholder="0.00"
+                                  {...field}
+                                  value={field.value ?? ""}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="method"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Payment Method</FormLabel>
+                              <Select onValueChange={field.onChange} value={field.value}>
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select Method" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="CASH">Cash</SelectItem>
+                                  <SelectItem value="ONLINE">Online</SelectItem>
+                                  <SelectItem value="CHEQUE">Cheque</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+
+                      <FormField
+                        control={form.control}
+                        name="receiptNo"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Receipt No</FormLabel>
+                            <FormControl><Input placeholder="R-1001" {...field} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="description"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Description</FormLabel>
+                            <FormControl><Input placeholder="Monthly Tuition Fee" {...field} value={field.value || ''} /></FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <Button type="submit" className="w-full" disabled={createFee.isPending}>
+                        {createFee.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                        Record Payment
+                      </Button>
+                    </form>
+                  </Form>
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
         </div>
 
         <div className="bg-card rounded-xl border border-border shadow-lg shadow-black/5 overflow-hidden">

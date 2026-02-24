@@ -20,12 +20,15 @@ import { insertSubjectSchema, type InsertSubject } from "@shared/schema";
 import { z } from "zod";
 import { useState } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/hooks/use-auth";
 
 const createSubjectFormSchema = insertSubjectSchema.extend({
   subjectTeacherId: z.number().optional(),
 });
 
 export default function Subjects() {
+  const { isAdmin } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { data: subjects, isLoading } = useSubjects();
   const { data: classes } = useClasses();
@@ -62,106 +65,111 @@ export default function Subjects() {
             <h1 className="text-3xl font-bold text-foreground font-display">Subjects</h1>
             <p className="text-muted-foreground mt-1">Manage subject records</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="bg-primary text-white shadow-lg shadow-primary/25">
-                <Plus className="w-4 h-4 mr-2" />
-                Add Subject
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-              <DialogHeader>
-                <DialogTitle>Create New Subject</DialogTitle>
-                <DialogDescription>Add subject name, code, and class mapping.</DialogDescription>
-              </DialogHeader>
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Subject Name</FormLabel>
-                        <FormControl>
-                          <Input placeholder="Mathematics" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="code"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Subject Code</FormLabel>
-                        <FormControl>
-                          <Input placeholder="MATH-101" {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="classId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Class</FormLabel>
-                        <Select onValueChange={(val) => field.onChange(Number(val))} value={field.value?.toString()}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select Class" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {classes?.map((cls: any) => (
-                              <SelectItem key={cls.id} value={String(cls.id)}>
-                                {cls.name} - {cls.section}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="subjectTeacherId"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Teacher</FormLabel>
-                        <Select
-                          onValueChange={(val) => field.onChange(val === "none" ? undefined : Number(val))}
-                          value={field.value ? String(field.value) : "none"}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select Teacher" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="none">Not Assigned</SelectItem>
-                            {teamMembers.map((member: any) => (
-                              <SelectItem key={member.id} value={String(member.id)}>
-                                {member.name || member.email || `User #${member.id}`}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <Button type="submit" className="w-full" disabled={createSubject.isPending}>
-                    {createSubject.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                    Create Subject
+          <div className="flex items-center gap-3">
+            {!isAdmin && <Badge variant="secondary">Read-only</Badge>}
+            {isAdmin && (
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button className="bg-primary text-white shadow-lg shadow-primary/25">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Subject
                   </Button>
-                </form>
-              </Form>
-            </DialogContent>
-          </Dialog>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[500px]">
+                  <DialogHeader>
+                    <DialogTitle>Create New Subject</DialogTitle>
+                    <DialogDescription>Add subject name, code, and class mapping.</DialogDescription>
+                  </DialogHeader>
+                  <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name="name"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Subject Name</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Mathematics" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="code"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Subject Code</FormLabel>
+                            <FormControl>
+                              <Input placeholder="MATH-101" {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="classId"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Class</FormLabel>
+                            <Select onValueChange={(val) => field.onChange(Number(val))} value={field.value?.toString()}>
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select Class" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {classes?.map((cls: any) => (
+                                  <SelectItem key={cls.id} value={String(cls.id)}>
+                                    {cls.name} - {cls.section}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="subjectTeacherId"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Teacher</FormLabel>
+                            <Select
+                              onValueChange={(val) => field.onChange(val === "none" ? undefined : Number(val))}
+                              value={field.value ? String(field.value) : "none"}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Select Teacher" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="none">Not Assigned</SelectItem>
+                                {teamMembers.map((member: any) => (
+                                  <SelectItem key={member.id} value={String(member.id)}>
+                                    {member.name || member.email || `User #${member.id}`}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <Button type="submit" className="w-full" disabled={createSubject.isPending}>
+                        {createSubject.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                        Create Subject
+                      </Button>
+                    </form>
+                  </Form>
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
         </div>
 
         {isLoading ? (
@@ -189,19 +197,21 @@ export default function Subjects() {
                       "Not Assigned"}
                   </p>
                   <div className="mt-4">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-destructive border-destructive/30 hover:bg-destructive/10"
-                      disabled={deleteSubject.isPending}
-                      onClick={() => {
-                        if (!confirm(`Delete subject "${subject.name || "Untitled Subject"}"?`)) return;
-                        deleteSubject.mutate(Number(subject.id));
-                      }}
-                    >
-                      <Trash2 className="w-4 h-4 mr-1" />
-                      Delete
-                    </Button>
+                    {isAdmin && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                        disabled={deleteSubject.isPending}
+                        onClick={() => {
+                          if (!confirm(`Delete subject "${subject.name || "Untitled Subject"}"?`)) return;
+                          deleteSubject.mutate(Number(subject.id));
+                        }}
+                      >
+                        <Trash2 className="w-4 h-4 mr-1" />
+                        Delete
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>

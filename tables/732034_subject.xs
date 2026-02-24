@@ -9,6 +9,11 @@ table subject {
     int class_id? {
       table = "class"
     }
+  
+    // References the user who is assigned as the teacher for this subject.
+    int subject_teacher_id? {
+      table = "user"
+    }
   }
 
   index = [

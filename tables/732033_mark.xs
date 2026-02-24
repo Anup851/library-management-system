@@ -23,5 +23,13 @@ table mark {
   index = [
     {type: "primary", field: [{name: "id"}]}
     {type: "btree", field: [{name: "created_at", op: "desc"}]}
+    {
+      type : "btree|unique"
+      field: [
+        {name: "exam_id", op: "asc"}
+        {name: "student_id", op: "asc"}
+        {name: "subject_id", op: "asc"}
+      ]
+    }
   ]
 }

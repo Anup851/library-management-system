@@ -26,5 +26,6 @@ table student {
   index = [
     {type: "primary", field: [{name: "id"}]}
     {type: "btree", field: [{name: "created_at", op: "desc"}]}
+    {type: "btree|unique", field: [{name: "roll_no", op: "asc"}]}
   ]
 }

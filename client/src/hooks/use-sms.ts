@@ -8,6 +8,7 @@ import type {
 } from "@shared/schema";
 import { z } from "zod";
 import { api } from "@shared/routes";
+import { canWrite as canWriteAccess } from "@/hooks/use-auth";
 
 type AnyRecord = Record<string, any>;
 type Resource = "student" | "class" | "subject" | "attendance" | "exam" | "mark" | "fee";
@@ -182,6 +183,12 @@ function normalizeDateOnly(value: unknown): string {
   return str;
 }
 
+function assertCanWrite() {
+  if (!canWriteAccess()) {
+    throw new Error("Read-only access");
+  }
+}
+
 // === STUDENTS ===
 export function useStudents(params?: { classId?: number; search?: string }) {
   return useQuery({
@@ -241,8 +248,9 @@ export function useStudent(id: number) {
 export function useCreateStudent() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: InsertStudent) =>
-      xanoRequest("POST", "/student", {
+    mutationFn: async (data: InsertStudent) => {
+      assertCanWrite();
+      return xanoRequest("POST", "/student", {
         ...data,
         name: data.name,
         fullName: data.name,
@@ -252,7 +260,8 @@ export function useCreateStudent() {
         roll_number: (data as AnyRecord).rollNo,
         classId: (data as AnyRecord).classId,
         class_id: (data as AnyRecord).classId,
-      }),
+      });
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["xano", "students"] }),
   });
 }
@@ -260,8 +269,9 @@ export function useCreateStudent() {
 export function useUpdateStudent() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...data }: { id: number } & Partial<InsertStudent>) =>
-      xanoRequest("PATCH", `/student/${id}`, {
+    mutationFn: async ({ id, ...data }: { id: number } & Partial<InsertStudent>) => {
+      assertCanWrite();
+      return xanoRequest("PATCH", `/student/${id}`, {
         ...data,
         name: (data as AnyRecord).name,
         fullName: (data as AnyRecord).name,
@@ -271,7 +281,8 @@ export function useUpdateStudent() {
         roll_number: (data as AnyRecord).rollNo,
         classId: (data as AnyRecord).classId,
         class_id: (data as AnyRecord).classId,
-      }),
+      });
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["xano", "students"] }),
   });
 }
@@ -279,7 +290,10 @@ export function useUpdateStudent() {
 export function useDeleteStudent() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: number) => xanoRequest("DELETE", `/student/${id}`),
+    mutationFn: async (id: number) => {
+      assertCanWrite();
+      return xanoRequest("DELETE", `/student/${id}`);
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["xano", "students"] }),
   });
 }
@@ -309,12 +323,14 @@ export function useClasses() {
 export function useCreateClass() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: InsertClass) =>
-      xanoRequest("POST", "/class", {
+    mutationFn: async (data: InsertClass) => {
+      assertCanWrite();
+      return xanoRequest("POST", "/class", {
         ...data,
         classTeacherId: (data as AnyRecord).classTeacherId,
         class_teacher_id: (data as AnyRecord).classTeacherId,
-      }),
+      });
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["xano", "classes"] }),
   });
 }
@@ -322,12 +338,14 @@ export function useCreateClass() {
 export function useUpdateClass() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...data }: { id: number } & Partial<InsertClass>) =>
-      xanoRequest("PATCH", `/class/${id}`, {
+    mutationFn: async ({ id, ...data }: { id: number } & Partial<InsertClass>) => {
+      assertCanWrite();
+      return xanoRequest("PATCH", `/class/${id}`, {
         ...data,
         classTeacherId: (data as AnyRecord).classTeacherId,
         class_teacher_id: (data as AnyRecord).classTeacherId,
-      }),
+      });
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["xano", "classes"] }),
   });
 }
@@ -335,7 +353,10 @@ export function useUpdateClass() {
 export function useDeleteClass() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: number) => xanoRequest("DELETE", `/class/${id}`),
+    mutationFn: async (id: number) => {
+      assertCanWrite();
+      return xanoRequest("DELETE", `/class/${id}`);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["xano", "classes"] });
       queryClient.invalidateQueries({ queryKey: ["xano", "students"] });
@@ -413,6 +434,7 @@ export function useMarkAttendance() {
         id?: number | string;
       }>;
     }) => {
+      assertCanWrite();
       await Promise.all(
         data.records.map((record) => {
           const attendanceId = toNumericId(record.id);
@@ -446,7 +468,10 @@ export function useMarkAttendance() {
 export function useDeleteAttendance() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: number) => xanoRequest("DELETE", `/attendance/${id}`),
+    mutationFn: async (id: number) => {
+      assertCanWrite();
+      return xanoRequest("DELETE", `/attendance/${id}`);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["xano", "attendance"] });
       queryClient.invalidateQueries({ queryKey: ["xano", "dashboard", "stats"] });
@@ -470,7 +495,10 @@ export function useExams(classId?: number) {
 export function useCreateExam() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: InsertExam) => xanoRequest("POST", "/exam", data),
+    mutationFn: async (data: InsertExam) => {
+      assertCanWrite();
+      return xanoRequest("POST", "/exam", data);
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["xano", "exams"] }),
   });
 }
@@ -478,7 +506,10 @@ export function useCreateExam() {
 export function useDeleteExam() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: number) => xanoRequest("DELETE", `/exam/${id}`),
+    mutationFn: async (id: number) => {
+      assertCanWrite();
+      return xanoRequest("DELETE", `/exam/${id}`);
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["xano", "exams"] }),
   });
 }
@@ -487,6 +518,7 @@ export function useUpdateMarks() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: z.infer<typeof api.marks.update.input>) => {
+      assertCanWrite();
       await Promise.all(
         data.marks.map((m) =>
           xanoRequest("POST", "/mark", {
@@ -543,7 +575,10 @@ export function useFees() {
 export function useCreateFee() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: InsertFee) => xanoRequest("POST", "/fee", data),
+    mutationFn: async (data: InsertFee) => {
+      assertCanWrite();
+      return xanoRequest("POST", "/fee", data);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["xano", "fees"] });
       queryClient.invalidateQueries({ queryKey: ["xano", "dashboard", "stats"] });
@@ -554,7 +589,10 @@ export function useCreateFee() {
 export function useDeleteFee() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: number) => xanoRequest("DELETE", `/fee/${id}`),
+    mutationFn: async (id: number) => {
+      assertCanWrite();
+      return xanoRequest("DELETE", `/fee/${id}`);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["xano", "fees"] });
       queryClient.invalidateQueries({ queryKey: ["xano", "dashboard", "stats"] });
@@ -630,12 +668,14 @@ export function useSubjects(classId?: number) {
 export function useCreateSubject() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (data: InsertSubject & { subjectTeacherId?: number }) =>
-      xanoRequest("POST", "/subject", {
+    mutationFn: async (data: InsertSubject & { subjectTeacherId?: number }) => {
+      assertCanWrite();
+      return xanoRequest("POST", "/subject", {
         ...data,
         subjectTeacherId: (data as AnyRecord).subjectTeacherId,
         subject_teacher_id: (data as AnyRecord).subjectTeacherId,
-      }),
+      });
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["xano", "subjects"] }),
   });
 }
@@ -643,7 +683,104 @@ export function useCreateSubject() {
 export function useDeleteSubject() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: number) => xanoRequest("DELETE", `/subject/${id}`),
+    mutationFn: async (id: number) => {
+      assertCanWrite();
+      return xanoRequest("DELETE", `/subject/${id}`);
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["xano", "subjects"] }),
+  });
+}
+
+// === STUDENT/PARENT VIEW HOOKS ===
+export function useStudentAttendance(studentId?: number) {
+  return useQuery({
+    queryKey: ["xano", "attendance", "student", studentId],
+    enabled: !!XANO_SMS_BASE_URL && !!studentId,
+    queryFn: async () => {
+      const [attendanceRaw, classesRaw] = await Promise.all([list("attendance"), list("class")]);
+      const classesById = new Map<number, AnyRecord>();
+      for (const cls of classesRaw) {
+        const classId = readId(cls, ["id", "classId", "class", "class_id"]);
+        if (classId) classesById.set(classId, cls);
+      }
+
+      return attendanceRaw
+        .filter((rec) => readId(rec, ["studentId", "student", "student_id"]) === studentId)
+        .map((rec) => {
+          const classId = readId(rec, ["classId", "class", "class_id"]);
+          const cls = classesById.get(classId);
+          const date = normalizeDateOnly(firstDefined(rec, ["date", "attendanceDate", "attendance_date", "day"], ""));
+          return {
+            ...rec,
+            date,
+            class: cls
+              ? {
+                  id: readId(cls, ["id", "classId", "class", "class_id"]),
+                  name: firstDefined(cls, ["name"], ""),
+                  section: firstDefined(cls, ["section"], ""),
+                }
+              : { id: classId, name: "-", section: "-" },
+            status: String(firstDefined(rec, ["status"], "ABSENT")),
+          };
+        })
+        .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+    },
+  });
+}
+
+export function useStudentMarks(studentId?: number) {
+  return useQuery({
+    queryKey: ["xano", "marks", "student", studentId],
+    enabled: !!XANO_SMS_BASE_URL && !!studentId,
+    queryFn: async () => {
+      const [marksRaw, examsRaw, subjectsRaw] = await Promise.all([
+        list("mark"),
+        list("exam"),
+        list("subject"),
+      ]);
+
+      const examsById = new Map<number, AnyRecord>();
+      for (const exam of examsRaw) {
+        const id = readId(exam, ["id", "examId", "exam", "exam_id"]);
+        if (id) examsById.set(id, exam);
+      }
+
+      const subjectsById = new Map<number, AnyRecord>();
+      for (const subject of subjectsRaw) {
+        const id = readId(subject, ["id", "subjectId", "subject", "subject_id"]);
+        if (id) subjectsById.set(id, subject);
+      }
+
+      return marksRaw
+        .filter((mark) => readId(mark, ["studentId", "student", "student_id"]) === studentId)
+        .map((mark) => {
+          const examId = readId(mark, ["examId", "exam", "exam_id"]);
+          const subjectId = readId(mark, ["subjectId", "subject", "subject_id"]);
+          const exam = examsById.get(examId);
+          const subject = subjectsById.get(subjectId);
+          return {
+            ...mark,
+            examId,
+            subjectId,
+            score: Number(firstDefined(mark, ["score"], 0) || 0),
+            maxScore: Number(firstDefined(mark, ["maxScore", "max_score"], 100) || 100),
+            exam: exam
+              ? {
+                  id: examId,
+                  title: String(firstDefined(exam, ["title", "name"], "") || ""),
+                  date: firstDefined(exam, ["startDate", "start_date", "date"], ""),
+                }
+              : { id: examId, title: "Exam", date: "" },
+            subject: subject
+              ? {
+                  id: subjectId,
+                  name: String(firstDefined(subject, ["name"], "") || ""),
+                  code: String(firstDefined(subject, ["code"], "") || ""),
+                }
+              : { id: subjectId, name: "Subject", code: "" },
+          };
+        })
+        .sort((a, b) => String(a.exam?.title || "").localeCompare(String(b.exam?.title || "")));
+    },
   });
 }

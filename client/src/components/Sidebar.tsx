@@ -9,26 +9,45 @@ import {
   FileSpreadsheet,
   Wallet,
   LogOut,
-  GraduationCap
+  GraduationCap,
+  User
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 
-const menuItems = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/" },
-  { icon: Users, label: "Students", href: "/students" },
-  { icon: School, label: "Classes", href: "/classes" },
-  { icon: BookOpen, label: "Subjects", href: "/subjects" },
-  { icon: CalendarCheck, label: "Attendance", href: "/attendance" },
-  { icon: FileSpreadsheet, label: "Exams & Marks", href: "/exams" },
-  { icon: Wallet, label: "Fees", href: "/fees" },
-];
-
 export function Sidebar() {
   const [location] = useLocation();
-  const { logoutMutation, user } = useAuth();
+  const { logoutMutation, user, role, isAdmin } = useAuth();
   const displayName = user?.name || user?.username || "User";
   const displayInitial = displayName.charAt(0).toUpperCase();
+
+  const adminMenuItems = [
+    { icon: LayoutDashboard, label: "Dashboard", href: "/" },
+    { icon: Users, label: "Students", href: "/students" },
+    { icon: School, label: "Classes", href: "/classes" },
+    { icon: BookOpen, label: "Subjects", href: "/subjects" },
+    { icon: CalendarCheck, label: "Attendance", href: "/attendance" },
+    { icon: FileSpreadsheet, label: "Exams & Marks", href: "/exams" },
+    { icon: Wallet, label: "Fees", href: "/fees" },
+  ];
+
+  const studentMenuItems = [
+    { icon: LayoutDashboard, label: "Dashboard", href: "/portal" },
+    { icon: CalendarCheck, label: "My Attendance", href: "/my-attendance" },
+    { icon: Wallet, label: "My Fees", href: "/my-fees" },
+    { icon: FileSpreadsheet, label: "My Marks", href: "/my-marks" },
+    { icon: User, label: "Profile", href: "/profile" },
+  ];
+
+  const parentMenuItems = [
+    { icon: LayoutDashboard, label: "Dashboard", href: "/portal" },
+    { icon: CalendarCheck, label: "Child Attendance", href: "/child-attendance" },
+    { icon: Wallet, label: "Child Fees", href: "/child-fees" },
+    { icon: FileSpreadsheet, label: "Child Marks", href: "/child-marks" },
+    { icon: User, label: "Profile", href: "/profile" },
+  ];
+
+  const menuItems = isAdmin ? adminMenuItems : role === "parent" ? parentMenuItems : studentMenuItems;
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 bg-card border-r border-border flex flex-col z-30 hidden md:flex shadow-xl shadow-blue-900/5">
@@ -78,7 +97,7 @@ export function Sidebar() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold truncate text-foreground">{displayName}</p>
-            <p className="text-xs text-muted-foreground truncate capitalize">{user?.role?.toLowerCase()}</p>
+            <p className="text-xs text-muted-foreground truncate capitalize">{role}</p>
           </div>
         </div>
         <Button 

@@ -9,14 +9,14 @@ table user {
     email? email filters=trim|lower
     password? password filters=min:8|minAlpha:1|minDigit:1
   
+    // The role of the user within their company (e.g., 'admin', 'member').
+    enum role? {
+      values = ["admin", "student", "parent"]
+    }
+  
     // Reference to the company the user belongs to.
     int account_id? {
       table = "account"
-    }
-  
-    // The role of the user within their company (e.g., 'admin', 'member').
-    enum role? {
-      values = ["admin", "member"]
     }
   
     object password_reset? {
@@ -28,6 +28,19 @@ table user {
     }
   
     text password_hash?
+  
+    // Phone number of the user.
+    text phone? filters=trim
+  
+    // References the student record if the user's role is 'student'.
+    int student_id? {
+      table = "student"
+    }
+  
+    // References a list of student records if the user's role is 'parent'.
+    int[] child_ids? {
+      table = "student"
+    }
   }
 
   index = [
