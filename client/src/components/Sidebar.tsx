@@ -1,114 +1,175 @@
+import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard,
-  Users,
-  School,
   BookOpen,
-  CalendarCheck,
-  FileSpreadsheet,
-  Wallet,
+  Bot,
+  LayoutDashboard,
+  Library,
   LogOut,
-  GraduationCap,
-  User
+  Menu,
+  Moon,
+  ShieldCheck,
+  Sparkles,
+  SunMedium,
+  Users,
 } from "lucide-react";
-import { useAuth } from "@/hooks/use-auth";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { useAuth } from "@/hooks/use-auth";
 
-export function Sidebar() {
-  const [location] = useLocation();
-  const { logoutMutation, user, role, isAdmin } = useAuth();
-  const displayName = user?.name || user?.username || "User";
-  const displayInitial = displayName.charAt(0).toUpperCase();
+type SidebarProps = {
+  theme: "light" | "dark";
+  onToggleTheme: () => void;
+};
 
-  const adminMenuItems = [
+function SidebarNav({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?: () => void }) {
+  const [location, setLocation] = useLocation();
+  const { isAdmin, isLibrarian } = useAuth();
+
+  const menu = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/" },
-    { icon: Users, label: "Students", href: "/students" },
-    { icon: School, label: "Classes", href: "/classes" },
-    { icon: BookOpen, label: "Subjects", href: "/subjects" },
-    { icon: CalendarCheck, label: "Attendance", href: "/attendance" },
-    { icon: FileSpreadsheet, label: "Exams & Marks", href: "/exams" },
-    { icon: Wallet, label: "Fees", href: "/fees" },
+    { icon: Library, label: "Catalog", href: "/catalog" },
+    ...(isAdmin || isLibrarian ? [{ icon: Library, label: "Circulation", href: "/circulation" }] : []),
+    { icon: Sparkles, label: "Recommendations", href: "/recommendations" },
+    { icon: Bot, label: "AI Assistant", href: "/assistant" },
+    ...(isAdmin || isLibrarian ? [{ icon: Users, label: "Members", href: "/members" }] : []),
+    ...(isAdmin ? [{ icon: ShieldCheck, label: "Admin", href: "/admin" }] : []),
   ];
-
-  const studentMenuItems = [
-    { icon: LayoutDashboard, label: "Dashboard", href: "/portal" },
-    { icon: CalendarCheck, label: "My Attendance", href: "/my-attendance" },
-    { icon: Wallet, label: "My Fees", href: "/my-fees" },
-    { icon: FileSpreadsheet, label: "My Marks", href: "/my-marks" },
-    { icon: User, label: "Profile", href: "/profile" },
-  ];
-
-  const parentMenuItems = [
-    { icon: LayoutDashboard, label: "Dashboard", href: "/portal" },
-    { icon: CalendarCheck, label: "Child Attendance", href: "/child-attendance" },
-    { icon: Wallet, label: "Child Fees", href: "/child-fees" },
-    { icon: FileSpreadsheet, label: "Child Marks", href: "/child-marks" },
-    { icon: User, label: "Profile", href: "/profile" },
-  ];
-
-  const menuItems = isAdmin ? adminMenuItems : role === "parent" ? parentMenuItems : studentMenuItems;
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-64 bg-card border-r border-border flex flex-col z-30 hidden md:flex shadow-xl shadow-blue-900/5">
-      <div className="p-6 border-b border-border/50">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-lg shadow-primary/25">
-            <GraduationCap className="text-primary-foreground w-6 h-6" />
+    <nav className="space-y-1">
+      {menu.map((item) => {
+        const Icon = item.icon;
+        const active = location === item.href;
+        const content = (
+          <div
+            className={cn(
+              "flex cursor-pointer items-center gap-3 rounded-2xl px-4 py-3 text-sm transition-colors",
+              active
+                ? "bg-cyan-400 text-slate-950 shadow-lg shadow-cyan-500/20"
+                : "text-slate-700 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-50",
+              mobile && "border border-slate-200/70 bg-slate-50/80 dark:border-white/5 dark:bg-white/[0.03]",
+            )}
+          >
+            <Icon className="h-4 w-4" />
+            <span>{item.label}</span>
           </div>
-          <div>
-            <h1 className="font-display font-bold text-xl tracking-tight text-foreground">EduMaster</h1>
-            <p className="text-xs text-muted-foreground font-medium">SMS Portal</p>
-          </div>
+        );
+
+        if (mobile) {
+          return (
+            <button
+              key={item.href}
+              type="button"
+              className="block w-full text-left"
+              onClick={() => {
+                setLocation(item.href);
+                onNavigate?.();
+              }}
+            >
+              {content}
+            </button>
+          );
+        }
+
+        return (
+          <Link key={item.href} href={item.href}>
+            {content}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
+function SidebarShell({
+  theme,
+  onToggleTheme,
+  mobile = false,
+  onNavigate,
+}: SidebarProps & { mobile?: boolean; onNavigate?: () => void }) {
+  const { logoutMutation } = useAuth();
+
+  return (
+    <>
+      <div className="mb-8 flex items-center gap-3">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 via-blue-500 to-indigo-600 shadow-lg shadow-cyan-950/40">
+          <BookOpen className="h-6 w-6" />
+        </div>
+        <div>
+          <p className="text-lg font-semibold tracking-tight">LibraryHub</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Modern Library Management</p>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto py-6 px-4 space-y-1">
-        <div className="mb-6 px-2">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Main Menu</p>
-          <div className="space-y-1">
-            {menuItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = location === item.href;
-              return (
-                <Link key={item.href} href={item.href}>
-                  <div
-                    className={cn(
-                      "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer group",
-                      isActive
-                        ? "bg-primary text-primary-foreground shadow-md shadow-primary/25"
-                        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                    )}
-                  >
-                    <Icon className={cn("w-5 h-5", isActive ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground")} />
-                    {item.label}
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      </div>
+      <SidebarNav mobile={mobile} onNavigate={onNavigate} />
 
-      <div className="p-4 border-t border-border/50 bg-secondary/30">
-        <div className="flex items-center gap-3 mb-4 px-2">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary to-blue-400 flex items-center justify-center text-white font-bold shadow-md">
-            {displayInitial}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold truncate text-foreground">{displayName}</p>
-            <p className="text-xs text-muted-foreground truncate capitalize">{role}</p>
-          </div>
-        </div>
-        <Button 
-          variant="outline" 
-          className="w-full justify-start text-muted-foreground hover:text-destructive hover:border-destructive/20 hover:bg-destructive/10 transition-colors"
-          onClick={() => logoutMutation.mutate()}
+      <div className="mt-auto space-y-3">
+        <Button
+          variant="outline"
+          className="w-full justify-start border-slate-200 bg-white/80 text-slate-700 hover:bg-slate-100 hover:text-slate-950 dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-white/10 dark:hover:text-white"
+          onClick={onToggleTheme}
         >
-          <LogOut className="w-4 h-4 mr-2" />
-          Log Out
+          {theme === "dark" ? <SunMedium className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
+          {theme === "dark" ? "Light mode" : "Dark mode"}
+        </Button>
+        <Button
+          variant="outline"
+          className="w-full justify-start border-slate-200 bg-transparent text-slate-600 hover:bg-rose-50 hover:text-rose-600 dark:border-white/10 dark:text-slate-300 dark:hover:bg-rose-500/10 dark:hover:text-rose-200"
+          onClick={() => {
+            logoutMutation.mutate();
+            onNavigate?.();
+          }}
+        >
+          <LogOut className="mr-2 h-4 w-4" />
+          Sign out
         </Button>
       </div>
+    </>
+  );
+}
+
+export function MobileSidebar({ theme, onToggleTheme }: SidebarProps) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="mb-5 flex items-center justify-start rounded-[1.5rem] border border-slate-200/80 bg-white/85 px-4 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/5 md:hidden">
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetTrigger asChild>
+          <button
+            type="button"
+            aria-label="Open menu"
+            className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm transition hover:bg-slate-100 dark:border-white/10 dark:bg-slate-950 dark:text-white dark:hover:bg-slate-900"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        </SheetTrigger>
+        <SheetContent side="left" className="w-[84vw] border-slate-200 bg-white p-6 text-slate-900 dark:border-white/10 dark:bg-slate-950 dark:text-slate-100">
+          <SheetHeader className="sr-only">
+            <SheetTitle>Menu</SheetTitle>
+            <SheetDescription>Open app sections</SheetDescription>
+          </SheetHeader>
+          <div className="flex h-full flex-col">
+            <SidebarShell theme={theme} onToggleTheme={onToggleTheme} mobile onNavigate={() => setOpen(false)} />
+          </div>
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+}
+
+export function Sidebar({ theme, onToggleTheme }: SidebarProps) {
+  return (
+    <aside className="hidden w-72 flex-col border-r border-slate-200/80 bg-white/85 px-5 py-6 text-slate-900 backdrop-blur dark:border-white/10 dark:bg-slate-950/90 dark:text-slate-100 md:flex">
+      <SidebarShell theme={theme} onToggleTheme={onToggleTheme} />
     </aside>
   );
 }

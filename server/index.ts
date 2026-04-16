@@ -2,9 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import "dotenv/config";
-
-
-
+import { registerRoutes } from "./routes";
 
 const app = express();
 const httpServer = createServer(app);
@@ -64,8 +62,10 @@ app.use((req, res, next) => {
 
 (async () => {
   app.get("/api/health", (_req, res) => {
-    res.json({ ok: true, source: "xano-client" });
+    res.json({ ok: true, source: "library-management-system" });
   });
+
+  registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

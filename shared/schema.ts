@@ -1,165 +1,205 @@
-
-import { pgTable, text, serial, integer, boolean, timestamp, date, decimal, primaryKey } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
-import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// === Enums ===
-export const userRoles = ["ADMIN", "TEACHER", "STUDENT"] as const;
-export const studentStatus = ["ACTIVE", "INACTIVE"] as const;
-export const attendanceStatus = ["PRESENT", "ABSENT", "LATE"] as const;
-export const feePaymentMethod = ["CASH", "ONLINE", "CHEQUE"] as const;
+export const roles = ["admin", "librarian", "student"] as const;
+export const transactionStatuses = ["ISSUED", "RETURNED", "OVERDUE"] as const;
+export const reservationStatuses = ["WAITING", "READY", "FULFILLED", "CANCELLED"] as const;
+export const notificationChannels = ["email", "sms", "in_app"] as const;
 
-// === USERS (Auth) ===
-export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
-  username: text("username").notNull().unique(), // email
-  password: text("password").notNull(),
-  role: text("role", { enum: userRoles }).notNull().default("STUDENT"),
-  name: text("name").notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
+export type Role = (typeof roles)[number];
+export type TransactionStatus = (typeof transactionStatuses)[number];
+export type ReservationStatus = (typeof reservationStatuses)[number];
+export type NotificationChannel = (typeof notificationChannels)[number];
+
+export const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6),
 });
 
-// === CLASSES ===
-export const classes = pgTable("classes", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(), // e.g., "Class 10"
-  section: text("section").notNull(), // e.g., "A"
-  classTeacherId: integer("class_teacher_id").references(() => users.id),
+export const branchSchema = z.object({
+  _id: z.string(),
+  name: z.string(),
+  code: z.string(),
+  address: z.string(),
 });
 
-// === STUDENTS ===
-export const students = pgTable("students", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").references(() => users.id), // Link to user for login
-  rollNo: text("roll_no").notNull().unique(),
-  name: text("name").notNull(),
-  email: text("email"),
-  phone: text("phone"),
-  gender: text("gender"),
-  dob: date("dob"),
-  address: text("address"),
-  classId: integer("class_id").references(() => classes.id).notNull(),
-  admissionDate: date("admission_date").defaultNow(),
-  status: text("status", { enum: studentStatus }).default("ACTIVE"),
+export const userSchema = z.object({
+  _id: z.string(),
+  name: z.string(),
+  email: z.string().email(),
+  role: z.enum(roles),
+  branchId: z.string().optional(),
+  avatar: z.string().optional(),
+  phone: z.string().optional(),
+  borrowingHistory: z.array(z.string()).default([]),
+  createdAt: z.string(),
 });
 
-// === SUBJECTS ===
-export const subjects = pgTable("subjects", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  code: text("code").notNull(),
-  classId: integer("class_id").references(() => classes.id).notNull(),
+export const bookSchema = z.object({
+  _id: z.string(),
+  title: z.string(),
+  author: z.string(),
+  category: z.string(),
+  isbn: z.string(),
+  barcode: z.string(),
+  description: z.string(),
+  coverImage: z.string().optional(),
+  ebookUrl: z.string().optional(),
+  publishedYear: z.number(),
+  language: z.string(),
+  format: z.enum(["physical", "digital", "hybrid"]),
+  tags: z.array(z.string()).default([]),
+  branchIds: z.array(z.string()).default([]),
+  totalCopies: z.number().int().min(0),
+  availableCopies: z.number().int().min(0),
+  ratingAverage: z.number().min(0).max(5).default(0),
+  ratingCount: z.number().int().min(0).default(0),
+  createdAt: z.string(),
+  updatedAt: z.string(),
 });
 
-// === ATTENDANCE ===
-export const attendance = pgTable("attendance", {
-  id: serial("id").primaryKey(),
-  studentId: integer("student_id").references(() => students.id).notNull(),
-  date: date("date").notNull(),
-  status: text("status", { enum: attendanceStatus }).notNull(),
-  classId: integer("class_id").references(() => classes.id).notNull(), // Denormalized for easier querying
+export const transactionSchema = z.object({
+  _id: z.string(),
+  bookId: z.string(),
+  userId: z.string(),
+  branchId: z.string(),
+  issuedBy: z.string(),
+  returnedTo: z.string().optional(),
+  issuedAt: z.string(),
+  dueDate: z.string(),
+  returnedAt: z.string().optional(),
+  fineAmount: z.number().min(0).default(0),
+  status: z.enum(transactionStatuses),
 });
 
-// === EXAMS ===
-export const exams = pgTable("exams", {
-  id: serial("id").primaryKey(),
-  title: text("title").notNull(), // e.g., "Midterm 2024"
-  classId: integer("class_id").references(() => classes.id).notNull(),
-  startDate: date("start_date"),
-  endDate: date("end_date"),
+export const reservationSchema = z.object({
+  _id: z.string(),
+  bookId: z.string(),
+  userId: z.string(),
+  status: z.enum(reservationStatuses),
+  position: z.number().int().min(1),
+  createdAt: z.string(),
+  notifiedAt: z.string().optional(),
 });
 
-// === MARKS ===
-export const marks = pgTable("marks", {
-  id: serial("id").primaryKey(),
-  examId: integer("exam_id").references(() => exams.id).notNull(),
-  studentId: integer("student_id").references(() => students.id).notNull(),
-  subjectId: integer("subject_id").references(() => subjects.id).notNull(),
-  score: decimal("score").notNull(),
-  maxScore: decimal("max_score").notNull().default("100"),
+export const reviewSchema = z.object({
+  _id: z.string(),
+  bookId: z.string(),
+  userId: z.string(),
+  rating: z.number().min(1).max(5),
+  comment: z.string(),
+  createdAt: z.string(),
 });
 
-// === FEES ===
-export const fees = pgTable("fees", {
-  id: serial("id").primaryKey(),
-  studentId: integer("student_id").references(() => students.id).notNull(),
-  amount: decimal("amount").notNull(),
-  paymentDate: date("payment_date").defaultNow(),
-  method: text("method", { enum: feePaymentMethod }).notNull(),
-  receiptNo: text("receipt_no").notNull().unique(),
-  description: text("description"), // e.g. "Tuition Fee March"
+export const notificationSchema = z.object({
+  _id: z.string(),
+  userId: z.string(),
+  title: z.string(),
+  message: z.string(),
+  channel: z.enum(notificationChannels),
+  read: z.boolean().default(false),
+  createdAt: z.string(),
 });
 
-// === RELATIONS ===
-export const usersRelations = relations(users, ({ one, many }) => ({
-  teacherClass: one(classes, {
-    fields: [users.id],
-    references: [classes.classTeacherId],
+export const auditLogSchema = z.object({
+  _id: z.string(),
+  actorId: z.string(),
+  action: z.string(),
+  entity: z.string(),
+  entityId: z.string(),
+  details: z.record(z.any()).default({}),
+  createdAt: z.string(),
+});
+
+export const issueBookSchema = z.object({
+  userId: z.string(),
+  branchId: z.string(),
+  bookId: z.string().optional(),
+  scanCode: z.string().optional(),
+  dueDate: z.string(),
+});
+
+export const returnBookSchema = z.object({
+  transactionId: z.string().optional(),
+  scanCode: z.string().optional(),
+});
+
+export const createBookSchema = bookSchema.omit({
+  _id: true,
+  ratingAverage: true,
+  ratingCount: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateBookSchema = createBookSchema.partial();
+
+export const createReviewSchema = z.object({
+  bookId: z.string(),
+  rating: z.number().min(1).max(5),
+  comment: z.string().min(3),
+});
+
+export const updateUserRoleSchema = z.object({
+  role: z.enum(roles),
+  branchId: z.string().optional(),
+});
+
+export const chatbotSchema = z.object({
+  message: z.string().min(2),
+});
+
+export const dashboardSchema = z.object({
+  totals: z.object({
+    books: z.number(),
+    users: z.number(),
+    activeLoans: z.number(),
+    overdueBooks: z.number(),
+    reservations: z.number(),
+    digitalTitles: z.number(),
+    fineRevenue: z.number(),
   }),
-  studentProfile: one(students, {
-    fields: [users.id],
-    references: [students.userId],
-  }),
-}));
+  mostBorrowedBooks: z.array(
+    z.object({
+      bookId: z.string(),
+      title: z.string(),
+      borrowCount: z.number(),
+    }),
+  ),
+  activeUsers: z.array(
+    z.object({
+      userId: z.string(),
+      name: z.string(),
+      borrowCount: z.number(),
+    }),
+  ),
+  overdueItems: z.array(transactionSchema),
+});
 
-export const classesRelations = relations(classes, ({ one, many }) => ({
-  teacher: one(users, {
-    fields: [classes.classTeacherId],
-    references: [users.id],
-  }),
-  students: many(students),
-  subjects: many(subjects),
-  exams: many(exams),
-}));
+export type Branch = z.infer<typeof branchSchema>;
+export type User = z.infer<typeof userSchema>;
+export type Book = z.infer<typeof bookSchema>;
+export type Transaction = z.infer<typeof transactionSchema>;
+export type Reservation = z.infer<typeof reservationSchema>;
+export type Review = z.infer<typeof reviewSchema>;
+export type Notification = z.infer<typeof notificationSchema>;
+export type AuditLog = z.infer<typeof auditLogSchema>;
+export type DashboardData = z.infer<typeof dashboardSchema>;
+export type LoginInput = z.infer<typeof loginSchema>;
+export type CreateBookInput = z.infer<typeof createBookSchema>;
+export type UpdateBookInput = z.infer<typeof updateBookSchema>;
+export type IssueBookInput = z.infer<typeof issueBookSchema>;
+export type ReturnBookInput = z.infer<typeof returnBookSchema>;
+export type CreateReviewInput = z.infer<typeof createReviewSchema>;
+export type UpdateUserRoleInput = z.infer<typeof updateUserRoleSchema>;
 
-export const studentsRelations = relations(students, ({ one, many }) => ({
-  user: one(users, {
-    fields: [students.userId],
-    references: [users.id],
-  }),
-  class: one(classes, {
-    fields: [students.classId],
-    references: [classes.id],
-  }),
-  attendance: many(attendance),
-  marks: many(marks),
-  fees: many(fees),
-}));
+export type AuthUser = User;
 
-export const examsRelations = relations(exams, ({ one, many }) => ({
-  class: one(classes, {
-    fields: [exams.classId],
-    references: [classes.id],
-  }),
-  marks: many(marks),
-}));
+export type AuthResponse = {
+  token: string;
+  user: User;
+};
 
-// === ZOD SCHEMAS ===
-export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
-export const insertClassSchema = createInsertSchema(classes).omit({ id: true });
-export const insertStudentSchema = createInsertSchema(students).omit({ id: true });
-export const insertSubjectSchema = createInsertSchema(subjects).omit({ id: true });
-export const insertAttendanceSchema = createInsertSchema(attendance).omit({ id: true });
-export const insertExamSchema = createInsertSchema(exams).omit({ id: true });
-export const insertMarkSchema = createInsertSchema(marks).omit({ id: true });
-export const insertFeeSchema = createInsertSchema(fees).omit({ id: true });
-
-// === TYPES ===
-export type User = typeof users.$inferSelect;
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type Student = typeof students.$inferSelect;
-export type InsertStudent = z.infer<typeof insertStudentSchema>;
-export type Class = typeof classes.$inferSelect;
-export type InsertClass = z.infer<typeof insertClassSchema>;
-export type Subject = typeof subjects.$inferSelect;
-export type InsertSubject = z.infer<typeof insertSubjectSchema>;
-export type Attendance = typeof attendance.$inferSelect;
-export type InsertAttendance = z.infer<typeof insertAttendanceSchema>;
-export type Exam = typeof exams.$inferSelect;
-export type InsertExam = z.infer<typeof insertExamSchema>;
-export type Mark = typeof marks.$inferSelect;
-export type InsertMark = z.infer<typeof insertMarkSchema>;
-export type Fee = typeof fees.$inferSelect;
-export type InsertFee = z.infer<typeof insertFeeSchema>;
-export type Role = "admin" | "student" | "parent";
+export type ChatbotResponse = {
+  reply: string;
+  suggestedBooks: Book[];
+};

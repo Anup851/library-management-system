@@ -1,0 +1,296 @@
+{
+  "users": [
+    {
+      "_id": "user_admin",
+      "name": "Ava Morgan",
+      "email": "admin@libraryhub.local",
+      "role": "admin",
+      "branchId": "branch_central",
+      "avatar": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80",
+      "phone": "+1 555 0100",
+      "borrowingHistory": [],
+      "createdAt": "2026-04-16T10:44:40.328Z",
+      "passwordHash": "$2b$10$9OtxV.fgOnH847I1tgnCtOczE7FZwCVBG8kmLr8D11GuQKP3pxfoK"
+    },
+    {
+      "_id": "user_librarian",
+      "name": "Marcus Lee",
+      "email": "librarian@libraryhub.local",
+      "role": "librarian",
+      "branchId": "branch_central",
+      "avatar": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=200&q=80",
+      "phone": "+1 555 0101",
+      "borrowingHistory": [],
+      "createdAt": "2026-04-16T10:44:40.328Z",
+      "passwordHash": "$2b$10$c0PXwKSTHszH0yHjHBx4pehMRICjuKNhyBNwW.hcHP7Esc5qBRSYy"
+    },
+    {
+      "_id": "user_student",
+      "name": "Nina Patel",
+      "email": "student@libraryhub.local",
+      "role": "student",
+      "branchId": "branch_north",
+      "avatar": "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=200&q=80",
+      "phone": "+1 555 0102",
+      "borrowingHistory": [
+        "book_atomic-habits",
+        "book_clean-code"
+      ],
+      "createdAt": "2026-04-16T10:44:40.328Z",
+      "passwordHash": "$2b$10$pEfColCuJlOS4hD7llyZ0OnAJNELKQzFqJC.bQIFIPQ0KOr1Selae"
+    }
+  ],
+  "branches": [
+    {
+      "_id": "branch_central",
+      "name": "Central Knowledge Branch",
+      "code": "CKB",
+      "address": "101 Library Square, Downtown"
+    },
+    {
+      "_id": "branch_north",
+      "name": "North Campus Branch",
+      "code": "NCB",
+      "address": "22 Research Avenue, North District"
+    }
+  ],
+  "books": [
+    {
+      "_id": "book_atomic-habits",
+      "title": "Atomic Habits",
+      "author": "James Clear",
+      "category": "Self Improvement",
+      "isbn": "9780735211292",
+      "barcode": "BK-10001",
+      "description": "Practical strategies for building good habits and breaking bad ones.",
+      "coverImage": "https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=800&q=80",
+      "ebookUrl": "https://example.com/ebooks/atomic-habits.pdf",
+      "publishedYear": 2018,
+      "language": "English",
+      "format": "hybrid",
+      "tags": [
+        "habits",
+        "productivity",
+        "mindset"
+      ],
+      "branchIds": [
+        "branch_central",
+        "branch_north"
+      ],
+      "totalCopies": 8,
+      "availableCopies": 5,
+      "ratingAverage": 4.8,
+      "ratingCount": 2,
+      "createdAt": "2026-04-16T10:44:40.328Z",
+      "updatedAt": "2026-04-16T10:44:40.328Z"
+    },
+    {
+      "_id": "book_clean-code",
+      "title": "Clean Code",
+      "author": "Robert C. Martin",
+      "category": "Software Engineering",
+      "isbn": "9780132350884",
+      "barcode": "BK-10002",
+      "description": "A handbook of agile software craftsmanship.",
+      "coverImage": "https://images.unsplash.com/photo-1495446815901-a7297e633e8d?auto=format&fit=crop&w=800&q=80",
+      "ebookUrl": "https://example.com/ebooks/clean-code.pdf",
+      "publishedYear": 2008,
+      "language": "English",
+      "format": "hybrid",
+      "tags": [
+        "coding",
+        "engineering",
+        "best-practices"
+      ],
+      "branchIds": [
+        "branch_central"
+      ],
+      "totalCopies": 6,
+      "availableCopies": 2,
+      "ratingAverage": 4.6,
+      "ratingCount": 3,
+      "createdAt": "2026-04-16T10:44:40.328Z",
+      "updatedAt": "2026-04-16T10:44:40.328Z"
+    },
+    {
+      "_id": "book_designing-data-intensive-applications",
+      "title": "Designing Data-Intensive Applications",
+      "author": "Martin Kleppmann",
+      "category": "Technology",
+      "isbn": "9781449373320",
+      "barcode": "BK-10003",
+      "description": "A deep guide to modern data systems, reliability, scalability, and maintainability.",
+      "coverImage": "https://images.unsplash.com/photo-1519682337058-a94d519337bc?auto=format&fit=crop&w=800&q=80",
+      "ebookUrl": "https://example.com/ebooks/ddia.pdf",
+      "publishedYear": 2017,
+      "language": "English",
+      "format": "digital",
+      "tags": [
+        "distributed-systems",
+        "architecture",
+        "databases"
+      ],
+      "branchIds": [
+        "branch_central",
+        "branch_north"
+      ],
+      "totalCopies": 3,
+      "availableCopies": 3,
+      "ratingAverage": 4.9,
+      "ratingCount": 1,
+      "createdAt": "2026-04-16T10:44:40.328Z",
+      "updatedAt": "2026-04-16T10:44:40.328Z"
+    },
+    {
+      "_id": "book_the-alchemist",
+      "title": "The Alchemist",
+      "author": "Paulo Coelho",
+      "category": "Fiction",
+      "isbn": "9780062315007",
+      "barcode": "BK-10004",
+      "description": "A philosophical novel about dreams, destiny, and personal legend.",
+      "coverImage": "https://images.unsplash.com/photo-1516979187457-637abb4f9353?auto=format&fit=crop&w=800&q=80",
+      "publishedYear": 1988,
+      "language": "English",
+      "format": "physical",
+      "tags": [
+        "fiction",
+        "philosophy",
+        "classic"
+      ],
+      "branchIds": [
+        "branch_north"
+      ],
+      "totalCopies": 5,
+      "availableCopies": 1,
+      "ratingAverage": 4.5,
+      "ratingCount": 4,
+      "createdAt": "2026-04-16T10:44:40.328Z",
+      "updatedAt": "2026-04-16T10:44:40.328Z"
+    }
+  ],
+  "transactions": [
+    {
+      "_id": "txn_1001",
+      "bookId": "book_clean-code",
+      "userId": "user_student",
+      "branchId": "branch_north",
+      "issuedBy": "user_librarian",
+      "issuedAt": "2026-04-04T10:44:40.565Z",
+      "dueDate": "2026-04-14T10:44:40.565Z",
+      "fineAmount": 15,
+      "status": "OVERDUE"
+    },
+    {
+      "_id": "txn_1002",
+      "bookId": "book_atomic-habits",
+      "userId": "user_student",
+      "branchId": "branch_central",
+      "issuedBy": "user_librarian",
+      "issuedAt": "2026-04-11T10:44:40.565Z",
+      "dueDate": "2026-04-25T10:44:40.565Z",
+      "fineAmount": 0,
+      "status": "ISSUED"
+    }
+  ],
+  "reservations": [
+    {
+      "_id": "reservation_1f206hz3",
+      "bookId": "book_the-alchemist",
+      "userId": "user_librarian",
+      "status": "WAITING",
+      "position": 2,
+      "createdAt": "2026-04-16T10:46:38.370Z"
+    },
+    {
+      "_id": "res_1001",
+      "bookId": "book_the-alchemist",
+      "userId": "user_student",
+      "status": "WAITING",
+      "position": 1,
+      "createdAt": "2026-04-16T10:44:40.328Z"
+    }
+  ],
+  "reviews": [
+    {
+      "_id": "review_1001",
+      "bookId": "book_atomic-habits",
+      "userId": "user_student",
+      "rating": 5,
+      "comment": "Very actionable and easy to revisit before exams.",
+      "createdAt": "2026-04-16T10:44:40.328Z"
+    },
+    {
+      "_id": "review_1002",
+      "bookId": "book_clean-code",
+      "userId": "user_student",
+      "rating": 4,
+      "comment": "Dense but worth it if you want stronger coding habits.",
+      "createdAt": "2026-04-16T10:44:40.328Z"
+    }
+  ],
+  "notifications": [
+    {
+      "_id": "notification_fi5nmxr9",
+      "userId": "user_librarian",
+      "title": "Reservation created",
+      "message": "You have been added to the waiting queue.",
+      "channel": "in_app",
+      "read": false,
+      "createdAt": "2026-04-16T10:46:38.371Z"
+    },
+    {
+      "_id": "notify_1001",
+      "userId": "user_student",
+      "title": "Overdue reminder",
+      "message": "Clean Code is overdue. Current fine: $10.",
+      "channel": "email",
+      "read": false,
+      "createdAt": "2026-04-16T10:44:40.328Z"
+    },
+    {
+      "_id": "notify_1002",
+      "userId": "user_student",
+      "title": "Reservation queued",
+      "message": "You are first in line for The Alchemist.",
+      "channel": "in_app",
+      "read": false,
+      "createdAt": "2026-04-16T10:44:40.328Z"
+    }
+  ],
+  "auditLogs": [
+    {
+      "_id": "log_opuw38hr",
+      "actorId": "user_librarian",
+      "action": "CREATE_RESERVATION",
+      "entity": "reservation",
+      "entityId": "reservation_1f206hz3",
+      "details": {
+        "bookId": "book_the-alchemist"
+      },
+      "createdAt": "2026-04-16T10:46:38.371Z"
+    },
+    {
+      "_id": "log_1001",
+      "actorId": "user_admin",
+      "action": "CREATE_BOOK",
+      "entity": "book",
+      "entityId": "book_designing-data-intensive-applications",
+      "details": {
+        "source": "seed"
+      },
+      "createdAt": "2026-04-16T10:44:40.328Z"
+    },
+    {
+      "_id": "log_1002",
+      "actorId": "user_librarian",
+      "action": "ISSUE_BOOK",
+      "entity": "transaction",
+      "entityId": "txn_1002",
+      "details": {
+        "source": "seed"
+      },
+      "createdAt": "2026-04-16T10:44:40.328Z"
+    }
+  ]
+}

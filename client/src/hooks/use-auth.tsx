@@ -1,62 +1,49 @@
-import { createContext, ReactNode, useContext } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { User, type Role } from "@shared/schema";
-import { useToast } from "@/hooks/use-toast";
+import { createContext, type ReactNode, useContext } from "react";
 import { useLocation } from "wouter";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { LoginInput, Role, User } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
+
+type RegisterInput = {
+  name: string;
+  email: string;
+  password: string;
+  role: "student";
+};
 
 type AuthContextType = {
   user: User | null;
   role: Role;
   isAdmin: boolean;
+  isLibrarian: boolean;
   isStudent: boolean;
-  isParent: boolean;
   canWrite: boolean;
   isLoading: boolean;
   error: Error | null;
-  loginMutation: any;
-  logoutMutation: any;
-  registerMutation: any;
+  loginMutation: ReturnType<typeof useMutation<any, Error, LoginInput>>;
+  registerMutation: ReturnType<typeof useMutation<any, Error, RegisterInput>>;
+  logoutMutation: ReturnType<typeof useMutation<void, Error, void>>;
 };
 
-const AuthContext = createContext<AuthContextType | null>(null);
-const rawAuthBase = (import.meta.env.VITE_XANO_AUTH_URL as string | undefined) || "/api";
-const normalizedAuthBase = rawAuthBase.replace(/\/$/, "").replace(/\/?api:/, "/api:");
-const XANO_AUTH_BASE_URL = normalizedAuthBase;
-const authUrl = (path: string) => `${XANO_AUTH_BASE_URL}${path}`;
-let authRateLimitedUntil = 0;
 const TOKEN_STORAGE_KEY = "token";
-const ROLE_STORAGE_KEY = "role";
+const USER_QUERY_KEY = ["/api/auth/me"];
 
-const VALID_ROLES: Role[] = ["admin", "student", "parent"];
+const AuthContext = createContext<AuthContextType | null>(null);
 
 function normalizeRole(value: unknown): Role {
-  if (!value) return "student";
-  const raw = String(value).trim().toLowerCase();
-  if (VALID_ROLES.includes(raw as Role)) return raw as Role;
-  if (raw === "teacher") return "admin";
-  if (raw === "student") return "student";
-  if (raw === "parent") return "parent";
+  const raw = String(value || "student").trim().toLowerCase();
   if (raw === "admin") return "admin";
-  if (raw === "administrator") return "admin";
-  if (raw === "guardian") return "parent";
+  if (raw === "librarian") return "librarian";
   return "student";
 }
 
-function setStoredRole(role: Role) {
-  localStorage.setItem(ROLE_STORAGE_KEY, role);
+export function canWrite() {
+  const role = normalizeRole(localStorage.getItem("role"));
+  return role === "admin" || role === "librarian";
 }
 
-export function getRole(): Role {
-  return normalizeRole(localStorage.getItem(ROLE_STORAGE_KEY));
-}
-
-export function canWrite(): boolean {
-  return getRole() === "admin";
-}
-
-export function getRoleHome(role?: Role): string {
-  const normalized = normalizeRole(role ?? getRole());
-  return normalized === "admin" ? "/" : "/portal";
+export function getRoleHome(_role?: Role) {
+  return "/";
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -68,187 +55,135 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     data: user,
     error,
     isLoading,
-    refetch,
   } = useQuery<User | null, Error>({
-    queryKey: [authUrl("/auth/me")],
+    queryKey: USER_QUERY_KEY,
     queryFn: async () => {
-      if (Date.now() < authRateLimitedUntil) {
-        throw new Error("Auth temporarily rate-limited. Please wait and retry.");
-      }
       const token = localStorage.getItem(TOKEN_STORAGE_KEY);
       if (!token) return null;
-      
-      const res = await fetch(authUrl("/auth/me"), {
-        headers: { Authorization: `Bearer ${token}` }
+
+      const response = await fetch("/api/auth/me", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
-      if (res.status === 429) {
-        authRateLimitedUntil = Date.now() + 60000;
-        throw new Error("Too many auth requests. Please wait 1 minute.");
-      }
-      if (res.status === 401) {
+
+      if (response.status === 401) {
         localStorage.removeItem(TOKEN_STORAGE_KEY);
-        localStorage.removeItem(ROLE_STORAGE_KEY);
+        localStorage.removeItem("role");
         return null;
       }
-      if (!res.ok) throw new Error("Failed to fetch user");
-      return await res.json();
-    },
-    onSuccess: (data) => {
-      if (data) {
-        setStoredRole(normalizeRole((data as any)?.role));
+
+      if (!response.ok) {
+        throw new Error("Failed to load current user");
       }
+
+      return response.json();
     },
   });
 
-  const loginMutation = useMutation({
-    mutationFn: async (credentials: { email: string; password: string }) => {
-      if (Date.now() < authRateLimitedUntil) {
-        throw new Error("Too many login attempts. Wait 1 minute and try again.");
-      }
-      const email = credentials.email.trim();
-      const password = credentials.password;
-      if (!email || !password) {
-        throw new Error("Email and password are required.");
-      }
-      console.log("[auth] sending login payload", { email, password: "***" });
-      const res = await fetch(authUrl("/auth/login"), {
+  const loginMutation = useMutation<any, Error, LoginInput>({
+    mutationFn: async (credentials: LoginInput) => {
+      const response = await fetch("/api/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          password,
-        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(credentials),
       });
-      if (!res.ok) {
-        if (res.status === 429) {
-          authRateLimitedUntil = Date.now() + 60000;
-          throw new Error("Too many login attempts. Wait 1 minute and try again.");
-        }
-        let message = `Login failed (${res.status})`;
-        try {
-          const parsed = await res.json();
-          message = parsed?.message || parsed?.error || parsed?.error_message || message;
-        } catch {
-          const raw = await res.text();
-          if (raw) message = raw;
-        }
-        throw new Error(message);
-      }
-      const payload = await res.json();
-      return payload;
-    },
-    onSuccess: (payload: any) => {
-      const token = payload?.authToken || payload?.token;
-      if (!token) {
-        throw new Error("Login succeeded but no auth token was returned");
-      }
-      if (payload?.user) {
-        queryClient.setQueryData([authUrl("/auth/me")], payload.user);
-      }
-      const role = normalizeRole(payload?.user?.role ?? payload?.role);
-      localStorage.setItem(TOKEN_STORAGE_KEY, token);
-      setStoredRole(role);
-      refetch();
-      setLocation(getRoleHome(role));
-      toast({
-        title: "Welcome back!",
-        description: "You are now signed in.",
-      });
-    },
-    onError: (error: Error) => {
-      const isRateLimit = /429|rate limit|too many/i.test(error.message);
-      toast({
-        title: "Login failed",
-        description: isRateLimit
-          ? "Too many login attempts. Wait 1-2 minutes, then try again."
-          : error.message,
-        variant: "destructive",
-      });
-    },
-  });
 
-  type RegisterPayload = {
-    name: string;
-    email: string;
-    password: string;
-    role: Role;
-    studentId?: number;
-    childIds?: number[];
-  };
-
-  const registerMutation = useMutation({
-    mutationFn: async (newUser: RegisterPayload) => {
-      const res = await fetch(authUrl("/auth/signup"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: newUser.name,
-          email: newUser.email,
-          username: newUser.email,
-          password: newUser.password,
-          role: newUser.role,
-          student_id: newUser.studentId,
-          child_ids: newUser.childIds,
-        }),
-      });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Registration failed");
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.message || "Unable to sign in");
       }
-      return await res.json();
+
+      return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (payload) => {
+      localStorage.setItem(TOKEN_STORAGE_KEY, payload.token);
+      localStorage.setItem("role", normalizeRole(payload.user?.role));
+      queryClient.setQueryData(USER_QUERY_KEY, payload.user);
+      setLocation("/");
       toast({
-        title: "Registration successful",
-        description: "You can now login with your credentials",
+        title: "Signed in",
+        description: "Your library workspace is ready.",
       });
-      setLocation("/auth/login");
     },
-    onError: (error: Error) => {
+    onError: (error) => {
       toast({
-        title: "Registration failed",
+        title: "Sign in failed",
         description: error.message,
         variant: "destructive",
       });
     },
   });
 
-  const logoutMutation = useMutation({
-    mutationFn: async () => {
-      localStorage.removeItem(TOKEN_STORAGE_KEY);
-      localStorage.removeItem(ROLE_STORAGE_KEY);
-      // No backend call needed for JWT/localStorage auth
+  const registerMutation = useMutation<any, Error, RegisterInput>({
+    mutationFn: async (payload: RegisterInput) => {
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.message || "Unable to create account");
+      }
+
+      return response.json();
     },
-    onSuccess: () => {
-      refetch(); // Will return null
-      setLocation("/auth/login");
+    onSuccess: (payload) => {
+      localStorage.setItem(TOKEN_STORAGE_KEY, payload.token);
+      localStorage.setItem("role", normalizeRole(payload.user?.role));
+      queryClient.setQueryData(USER_QUERY_KEY, payload.user);
+      setLocation("/");
       toast({
-        title: "Logged out",
-        description: "See you soon!",
+        title: "Account created",
+        description: "Your library account is ready.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Sign up failed",
+        description: error.message,
+        variant: "destructive",
       });
     },
   });
 
-  const role = normalizeRole((user as any)?.role ?? localStorage.getItem(ROLE_STORAGE_KEY));
-  const isAdmin = role === "admin";
-  const isStudent = role === "student";
-  const isParent = role === "parent";
-  const canWriteFlag = isAdmin;
+  const logoutMutation = useMutation<void, Error, void>({
+    mutationFn: async () => {
+      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      localStorage.removeItem("role");
+    },
+    onSuccess: () => {
+      queryClient.setQueryData(USER_QUERY_KEY, null);
+      setLocation("/");
+      toast({
+        title: "Signed out",
+        description: "You have left the library workspace.",
+      });
+    },
+  });
+
+  const role = normalizeRole(user?.role ?? localStorage.getItem("role"));
 
   return (
     <AuthContext.Provider
       value={{
         user: user ?? null,
         role,
-        isAdmin,
-        isStudent,
-        isParent,
-        canWrite: canWriteFlag,
+        isAdmin: role === "admin",
+        isLibrarian: role === "librarian",
+        isStudent: role === "student",
+        canWrite: role === "admin" || role === "librarian",
         isLoading,
         error,
         loginMutation,
-        logoutMutation,
         registerMutation,
+        logoutMutation,
       }}
     >
       {children}
@@ -259,7 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
+    throw new Error("useAuth must be used within AuthProvider");
   }
   return context;
 }
