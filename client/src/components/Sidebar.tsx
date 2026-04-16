@@ -40,7 +40,7 @@ function SidebarNav({ mobile = false, onNavigate }: { mobile?: boolean; onNaviga
     ...(isAdmin || isLibrarian ? [{ icon: Library, label: "Circulation", href: "/circulation" }] : []),
     { icon: Sparkles, label: "Recommendations", href: "/recommendations" },
     { icon: Bot, label: "AI Assistant", href: "/assistant" },
-    ...(isAdmin || isLibrarian ? [{ icon: Users, label: "Members", href: "/members" }] : []),
+    ...(isAdmin ? [{ icon: Users, label: "Members", href: "/members" }] : []),
     ...(isAdmin ? [{ icon: ShieldCheck, label: "Admin", href: "/admin" }] : []),
   ];
 
@@ -56,7 +56,7 @@ function SidebarNav({ mobile = false, onNavigate }: { mobile?: boolean; onNaviga
               active
                 ? "bg-cyan-400 text-slate-950 shadow-lg shadow-cyan-500/20"
                 : "text-slate-700 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-50",
-              mobile && "border border-slate-200/70 bg-slate-50/80 dark:border-white/5 dark:bg-white/[0.03]",
+              mobile && !active && "border border-slate-200/80 bg-white/80 dark:border-white/10 dark:bg-white/5",
             )}
           >
             <Icon className="h-4 w-4" />
@@ -141,7 +141,7 @@ export function MobileSidebar({ theme, onToggleTheme }: SidebarProps) {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="mb-5 flex items-center justify-start rounded-[1.5rem] border border-slate-200/80 bg-white/85 px-4 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/5 md:hidden">
+    <div className="mb-5 flex items-center justify-start rounded-[1.5rem] border border-slate-200/80 bg-white/85 px-4 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-slate-950/90 md:hidden">
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
           <button
@@ -152,7 +152,7 @@ export function MobileSidebar({ theme, onToggleTheme }: SidebarProps) {
             <Menu className="h-5 w-5" />
           </button>
         </SheetTrigger>
-        <SheetContent side="left" className="w-[84vw] border-slate-200 bg-white p-6 text-slate-900 dark:border-white/10 dark:bg-slate-950 dark:text-slate-100">
+        <SheetContent side="left" className="w-[84vw] border-r border-slate-200/80 bg-white/85 p-6 text-slate-900 backdrop-blur dark:border-white/10 dark:bg-slate-950/90 dark:text-slate-100">
           <SheetHeader className="sr-only">
             <SheetTitle>Menu</SheetTitle>
             <SheetDescription>Open app sections</SheetDescription>
@@ -168,7 +168,7 @@ export function MobileSidebar({ theme, onToggleTheme }: SidebarProps) {
 
 export function Sidebar({ theme, onToggleTheme }: SidebarProps) {
   return (
-    <aside className="hidden w-72 flex-col border-r border-slate-200/80 bg-white/85 px-5 py-6 text-slate-900 backdrop-blur dark:border-white/10 dark:bg-slate-950/90 dark:text-slate-100 md:flex">
+    <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-slate-200/80 bg-white/85 px-4 py-6 text-slate-900 backdrop-blur dark:border-white/10 dark:bg-slate-950/90 dark:text-slate-100 md:flex">
       <SidebarShell theme={theme} onToggleTheme={onToggleTheme} />
     </aside>
   );

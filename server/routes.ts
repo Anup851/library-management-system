@@ -128,36 +128,152 @@ function recommendBooks(currentUser: User, books: Book[]) {
     .slice(0, 4);
 }
 
-function buildChatResponse(message: string, books: Book[], recommendations: Book[]) {
-  const normalized = message.toLowerCase();
-  if (normalized.includes("overdue")) {
+function formatBookAvailability(book: Book, branches: { _id: string; name: string }[]) {
+  const branchNames = branches
+    .filter((branch) => book.branchIds.includes(branch._id))
+    .map((branch) => branch.name);
+  const locationText = branchNames.length > 0 ? `Available in ${branchNames.join(", ")}` : "No branch assignment yet";
+  const digitalText = book.ebookUrl ? "Digital access is available." : "No digital copy is linked.";
+  return `${book.title} by ${book.author} has ${book.availableCopies} of ${book.totalCopies} copies available. ${locationText}. ${digitalText}`;
+}
+
+function buildChatResponse(
+  message: string,
+  books: Book[],
+  recommendations: Book[],
+  branches: { _id: string; name: string }[],
+  transactions: Transaction[],
+  reservations: Reservation[],
+  currentUser: User,
+) {
+  const normalized = message.toLowerCase().trim();
+  const activeLoans = transactions.filter((transaction) => transaction.status !== "RETURNED");
+  const userLoans = activeLoans.filter((transaction) => transaction.userId === currentUser._id);
+  const overdueLoans = userLoans.filter((transaction) => transaction.status === "OVERDUE");
+  const waitingReservations = reservations.filter(
+    (reservation) => reservation.userId === currentUser._id && (reservation.status === "WAITING" || reservation.status === "READY"),
+  );
+
+  const matchingBooks = books.filter((book) => {
+    const haystack = `${book.title} ${book.author} ${book.category} ${book.isbn} ${book.barcode}`.toLowerCase();
+    return normalized.length > 1 && haystack.includes(normalized);
+  });
+
+  if (normalized.includes("overdue") || normalized.includes("fine")) {
+    if (overdueLoans.length === 0) {
+      return {
+        reply: "You do not have any overdue loans right now. If you want, I can help you check current borrowed books or reservation status.",
+        suggestedBooks: recommendations,
+      };
+    }
+
+    const summary = overdueLoans
+      .map((loan) => {
+        const book = books.find((candidate) => candidate._id === loan.bookId);
+        return `${book?.title || "Unknown title"} is overdue with a current fine of $${loan.fineAmount}.`;
+      })
+      .join(" ");
+
     return {
-      reply: "Overdue titles are shown on the dashboard. Librarians can also scan a barcode from the circulation panel to process returns and clear fines.",
-      suggestedBooks: recommendations,
+      reply: summary,
+      suggestedBooks: overdueLoans
+        .map((loan) => books.find((candidate) => candidate._id === loan.bookId))
+        .filter(Boolean) as Book[],
+    };
+  }
+
+  if (normalized.includes("available") || normalized.includes("availability") || normalized.includes("copy")) {
+    const targetBooks = matchingBooks.length > 0 ? matchingBooks : books.filter((book) => book.availableCopies > 0).slice(0, 3);
+    const reply = targetBooks.length > 0
+      ? targetBooks.map((book) => formatBookAvailability(book, branches)).join(" ")
+      : "I could not find an available copy for that search. Try another title, author, or category.";
+
+    return {
+      reply,
+      suggestedBooks: targetBooks.slice(0, 4),
+    };
+  }
+
+  if (normalized.includes("ebook") || normalized.includes("digital")) {
+    const digitalBooks = (matchingBooks.length > 0 ? matchingBooks : books.filter((book) => Boolean(book.ebookUrl))).slice(0, 4);
+    return {
+      reply: digitalBooks.length > 0
+        ? digitalBooks.map((book) => `${book.title} has a digital copy ready to open.`).join(" ")
+        : "I could not find a digital title for that search.",
+      suggestedBooks: digitalBooks,
     };
   }
 
   if (normalized.includes("recommend") || normalized.includes("suggest")) {
     return {
-      reply: "I looked at borrowing patterns and current ratings to suggest books you are most likely to enjoy next.",
+      reply: "I used borrowing history, ratings, and category fit to prepare a few suggestions. You can ask me for software, fiction, self-improvement, or digital book recommendations too.",
       suggestedBooks: recommendations,
     };
   }
 
-  const matchingBooks = books.filter((book) => {
-    const haystack = `${book.title} ${book.author} ${book.category} ${book.isbn}`.toLowerCase();
-    return haystack.includes(normalized);
-  });
+  if (normalized.includes("borrow") || normalized.includes("issued") || normalized.includes("my books")) {
+    if (userLoans.length === 0) {
+      return {
+        reply: "You do not have any active borrowed books right now.",
+        suggestedBooks: recommendations,
+      };
+    }
+
+    return {
+      reply: userLoans
+        .map((loan) => {
+          const book = books.find((candidate) => candidate._id === loan.bookId);
+          return `${book?.title || "Unknown title"} is due on ${new Date(loan.dueDate).toLocaleDateString()}.`;
+        })
+        .join(" "),
+      suggestedBooks: userLoans
+        .map((loan) => books.find((candidate) => candidate._id === loan.bookId))
+        .filter(Boolean) as Book[],
+    };
+  }
+
+  if (normalized.includes("reservation") || normalized.includes("reserve")) {
+    if (waitingReservations.length === 0 && matchingBooks.length === 0) {
+      return {
+        reply: "You do not have any active reservations right now. If you want to reserve a specific book, ask me for its availability first.",
+        suggestedBooks: recommendations,
+      };
+    }
+
+    if (matchingBooks.length > 0) {
+      return {
+        reply: matchingBooks
+          .map((book) => {
+            const queue = reservations.filter((reservation) => reservation.bookId === book._id && reservation.status === "WAITING");
+            return `${book.title} currently has ${queue.length} waiting reservation${queue.length === 1 ? "" : "s"}.`;
+          })
+          .join(" "),
+        suggestedBooks: matchingBooks.slice(0, 4),
+      };
+    }
+
+    return {
+      reply: waitingReservations
+        .map((reservation) => {
+          const book = books.find((candidate) => candidate._id === reservation.bookId);
+          return `${book?.title || "Unknown title"} is in your reservation list with status ${reservation.status.toLowerCase()}.`;
+        })
+        .join(" "),
+      suggestedBooks: waitingReservations
+        .map((reservation) => books.find((candidate) => candidate._id === reservation.bookId))
+        .filter(Boolean) as Book[],
+    };
+  }
 
   if (matchingBooks.length > 0) {
     return {
-      reply: `I found ${matchingBooks.length} matching title${matchingBooks.length > 1 ? "s" : ""}. You can open the catalog, reserve a title, or use the barcode value for circulation.`,
+      reply: matchingBooks.map((book) => formatBookAvailability(book, branches)).join(" "),
       suggestedBooks: matchingBooks.slice(0, 4),
     };
   }
 
   return {
-    reply: "Try asking for a title, author, category, or recommendation. I can also help you find overdue items, digital books, and available copies.",
+    reply: "I can help with book availability, due dates, overdue fines, digital books, reservations, and recommendations. Try asking things like 'Is Clean Code available?', 'What books do I have borrowed?', or 'Show digital books for DBMS'.",
     suggestedBooks: recommendations,
   };
 }
@@ -672,7 +788,17 @@ export function registerRoutes(app: Express) {
       const safeUsers = state.users.map(publicUser);
       const currentUser = currentUserOrThrow(req, safeUsers);
       const recommendations = recommendBooks(currentUser, state.books);
-      return res.json(buildChatResponse(input.message, state.books, recommendations));
+      return res.json(
+        buildChatResponse(
+          input.message,
+          state.books,
+          recommendations,
+          state.branches,
+          state.transactions,
+          state.reservations,
+          currentUser,
+        ),
+      );
     } catch (error) {
       return res.status(400).json({ message: error instanceof Error ? error.message : "Unable to answer query" });
     }

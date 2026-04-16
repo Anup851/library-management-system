@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, Route, Switch, useLocation } from "wouter";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { Bell } from "lucide-react";
 import { queryClient } from "./lib/queryClient";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
@@ -42,32 +43,34 @@ function LoginScreen() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 px-6 py-12 text-white">
-      <div className="mx-auto grid min-h-[80vh] max-w-6xl items-center gap-10 lg:grid-cols-2">
-        <div>
-          <p className="inline-block rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-sm text-cyan-200">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#164e63_0%,#0f172a_38%,#020617_100%)] px-4 py-8 text-white sm:px-6 sm:py-12">
+      <div className="mx-auto grid min-h-[80vh] max-w-6xl items-center gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14">
+        <div className="order-2 lg:order-1">
+          <p className="inline-flex rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-sm text-cyan-200 backdrop-blur">
             LibraryHub
           </p>
-          <h1 className="mt-6 text-5xl font-semibold tracking-tight">
-            Full-stack Library Management System
+          <h1 className="mt-6 max-w-xl text-4xl font-semibold tracking-tight sm:text-5xl">
+            Modern Library Management System
           </h1>
-          <p className="mt-4 text-lg text-slate-300">
-            Role-based access, catalog management, circulation, fines, reservations, digital books, recommendations, analytics, and an assistant-driven search experience.
+          <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg">
+            Clean, fast, and easy to use for admins, librarians, and students across desktop and mobile.
           </p>
-          <div className="mt-8 grid gap-4 sm:grid-cols-3">
-            {["RBAC", "Circulation", "Smart Discovery"].map((item) => (
-              <div key={item} className="rounded-3xl border border-white/10 bg-white/5 p-5">
-                <p className="font-semibold">{item}</p>
-                <p className="mt-2 text-sm text-slate-300">Built for real library workflows, not a demo-only dashboard.</p>
-              </div>
+          <div className="mt-8 flex flex-wrap gap-3">
+            {["Responsive UI", "Quick Access", "Role Ready"].map((item) => (
+              <span
+                key={item}
+                className="rounded-full border border-white/10 bg-white/8 px-4 py-2 text-sm text-slate-200 backdrop-blur"
+              >
+                {item}
+              </span>
             ))}
           </div>
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {presets.map((preset) => (
               <button
                 key={preset.role}
                 type="button"
-                className="rounded-[1.75rem] border border-white/10 bg-white/5 p-5 text-left transition hover:border-cyan-400/40 hover:bg-cyan-400/10"
+                className="rounded-[1.75rem] border border-white/10 bg-white/5 p-5 text-left shadow-lg shadow-slate-950/20 transition hover:-translate-y-0.5 hover:border-cyan-400/40 hover:bg-cyan-400/10"
                 onClick={() => applyPreset(preset)}
               >
                 <p className="text-xs uppercase tracking-[0.3em] text-cyan-200">{preset.role}</p>
@@ -77,7 +80,7 @@ function LoginScreen() {
             ))}
           </div>
         </div>
-        <div className="rounded-[2rem] border border-white/10 bg-white/10 p-6 backdrop-blur">
+        <div className="order-1 rounded-[2rem] border border-white/10 bg-white/10 p-5 shadow-2xl shadow-cyan-950/20 backdrop-blur sm:p-6 lg:order-2">
           <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-slate-950/30 p-1">
             <button
               type="button"
@@ -111,11 +114,6 @@ function LoginScreen() {
                   {loginMutation.isPending ? "Signing in..." : "Open workspace"}
                 </Button>
               </div>
-              <div className="mt-6 rounded-2xl border border-white/10 bg-slate-950/30 p-4 text-sm text-slate-300">
-                <p className="font-medium text-white">Staff accounts</p>
-                <p className="mt-2">Admin can assign roles in the Members page and add books from Catalog.</p>
-                <p>Librarian can manage circulation and member support.</p>
-              </div>
             </>
           ) : (
             <>
@@ -133,10 +131,6 @@ function LoginScreen() {
                   {registerMutation.isPending ? "Creating account..." : "Create student account"}
                 </Button>
               </div>
-              <div className="mt-6 rounded-2xl border border-white/10 bg-slate-950/30 p-4 text-sm text-slate-300">
-                <p className="font-medium text-white">Who creates staff users?</p>
-                <p className="mt-2">Admin and librarian users should be created by an existing admin in Supabase, then their roles can be managed from the app.</p>
-              </div>
             </>
           )}
         </div>
@@ -147,33 +141,244 @@ function LoginScreen() {
 
 function Card({ title, text, children }: { title: string; text: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-[2rem] border border-slate-200/80 bg-white/80 p-6 shadow-sm dark:border-white/10 dark:bg-white/5">
-      <h2 className="text-xl font-semibold">{title}</h2>
-      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{text}</p>
-      <div className="mt-5">{children}</div>
+    <section className="rounded-[1.75rem] border border-slate-200/80 bg-white/80 p-4 shadow-sm dark:border-white/10 dark:bg-white/5 sm:rounded-[2rem] sm:p-6">
+      <h2 className="text-lg font-semibold sm:text-xl">{title}</h2>
+      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 sm:text-sm">{text}</p>
+      <div className="mt-4 sm:mt-5">{children}</div>
     </section>
   );
 }
 
+function formatTimeLeft(dueDate: string) {
+  const now = Date.now();
+  const due = new Date(dueDate).getTime();
+  const diff = due - now;
+  const absDiff = Math.abs(diff);
+  const totalHours = Math.floor(absDiff / (1000 * 60 * 60));
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+
+  if (diff < 0) {
+    if (days > 0) return `${days} day${days === 1 ? "" : "s"} overdue`;
+    return `${Math.max(hours, 1)} hour${hours === 1 ? "" : "s"} overdue`;
+  }
+
+  if (days > 0) return `${days} day${days === 1 ? "" : "s"} left`;
+  return `${Math.max(hours, 1)} hour${hours === 1 ? "" : "s"} left`;
+}
+
+function getAutoLoanAlerts(transactions: any[], books: any[]) {
+  return transactions
+    .filter((transaction) => transaction.status !== "RETURNED")
+    .map((transaction) => {
+      const book = books.find((candidate: any) => candidate._id === transaction.bookId);
+      const due = new Date(transaction.dueDate).getTime();
+      const remaining = due - Date.now();
+      const isOverdue = transaction.status === "OVERDUE" || remaining < 0;
+      const isDueSoon = !isOverdue && remaining <= 2 * 24 * 60 * 60 * 1000;
+
+      if (!isOverdue && !isDueSoon) return null;
+
+      return {
+        id: `loan-${transaction._id}`,
+        title: isOverdue ? "Overdue book" : "Return due soon",
+        message: isOverdue
+          ? `${book?.title || "Borrowed book"} is overdue. Please return it soon.`
+          : `${book?.title || "Borrowed book"} is due in ${formatTimeLeft(transaction.dueDate)}.`,
+        meta: `Due ${new Date(transaction.dueDate).toLocaleDateString()}`,
+        variant: isOverdue ? "overdue" : "warning",
+      };
+    })
+    .filter(Boolean);
+}
+
+function NotificationBell({ data }: { data: any }) {
+  const [open, setOpen] = useState(false);
+  const [seenAlertIds, setSeenAlertIds] = useState<string[]>([]);
+  const autoAlerts = getAutoLoanAlerts(data.transactions, data.books);
+  const manualAlerts = data.notifications.map((notification: any) => ({
+    id: notification._id,
+    title: notification.title,
+    message: notification.message,
+    meta: new Date(notification.createdAt).toLocaleString(),
+    variant: "info",
+  }));
+  const alerts = [...autoAlerts, ...manualAlerts].slice(0, 6);
+  const unseenAlerts = alerts.filter((alert: any) => !seenAlertIds.includes(alert.id));
+
+  useEffect(() => {
+    if (!open || alerts.length === 0) return;
+    setSeenAlertIds((current) => Array.from(new Set([...current, ...alerts.map((alert: any) => alert.id)])));
+  }, [open, alerts]);
+
+  return (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        aria-label="Open notifications"
+        className="relative flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200/80 bg-white/85 text-slate-700 shadow-sm transition hover:border-cyan-300 hover:text-cyan-700 dark:border-white/10 dark:bg-slate-950/80 dark:text-slate-200 dark:hover:border-cyan-400 dark:hover:text-cyan-200"
+        onClick={() => setOpen((current) => !current)}
+      >
+        <Bell className="h-5 w-5" />
+        {unseenAlerts.length > 0 ? (
+          <span className="absolute -right-1 -top-1 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[11px] font-semibold text-white">
+            {unseenAlerts.length}
+          </span>
+        ) : null}
+      </button>
+
+      {open ? (
+        <div className="absolute right-0 top-14 z-30 w-[min(20rem,calc(100vw-1.5rem))] rounded-[1.5rem] border border-slate-200/80 bg-white/95 p-3 shadow-2xl backdrop-blur dark:border-white/10 dark:bg-slate-950/95">
+          <div className="mb-3 flex items-center justify-between px-2">
+            <div>
+              <p className="text-sm font-semibold">Notifications</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Automatic reminders and updates</p>
+            </div>
+            {autoAlerts.length > 0 ? (
+              <span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-700 dark:text-amber-200">
+                {autoAlerts.length} due soon
+              </span>
+            ) : null}
+          </div>
+
+          <div className="max-h-[24rem] space-y-2 overflow-y-auto pr-1">
+            {alerts.length > 0 ? alerts.map((alert: any) => (
+              <div
+                key={alert.id}
+                className={`rounded-2xl border p-3 ${
+                  alert.variant === "overdue"
+                    ? "border-rose-200 bg-rose-50/80 dark:border-rose-500/20 dark:bg-rose-500/10"
+                    : alert.variant === "warning"
+                      ? "border-amber-200 bg-amber-50/80 dark:border-amber-500/20 dark:bg-amber-500/10"
+                      : "border-slate-200/80 bg-slate-50/80 dark:border-white/10 dark:bg-white/5"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <p className="text-sm font-medium">{alert.title}</p>
+                  <span className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                    {alert.variant === "overdue" ? "Urgent" : alert.variant === "warning" ? "Soon" : "Info"}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{alert.message}</p>
+                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{alert.meta}</p>
+              </div>
+            )) : (
+              <div className="rounded-2xl border border-dashed border-slate-300/80 p-4 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
+                No notifications right now.
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function Dashboard({ data }: { data: any }) {
+  const { isStudent } = useAuth();
+  const activeLoans = data.transactions.filter((transaction: any) => transaction.status !== "RETURNED");
+  const overdueLoans = activeLoans.filter((transaction: any) => transaction.status === "OVERDUE");
+  const nextDueLoan = [...activeLoans].sort(
+    (a: any, b: any) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(),
+  )[0];
+
+  if (isStudent) {
+    return (
+      <div className="space-y-6">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+          {[
+            ["Borrowed Books", activeLoans.length],
+            ["Overdue", overdueLoans.length],
+            ["Reservations", data.reservations.length],
+            ["Next Return", nextDueLoan ? formatTimeLeft(nextDueLoan.dueDate) : "No active loans"],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-[1.25rem] border border-slate-200/80 bg-white/80 p-4 dark:border-white/10 dark:bg-white/5 sm:rounded-[1.5rem] sm:p-5">
+              <p className="text-xs text-slate-500 dark:text-slate-400 sm:text-sm">{label}</p>
+              <p className="mt-2 text-xl font-semibold sm:mt-3 sm:text-3xl">{value}</p>
+            </div>
+          ))}
+        </div>
+
+        <Card title="My Borrowed Books" text="Track every active book and its return timeline.">
+          <div className="max-h-[34rem] space-y-3 overflow-y-auto pr-1 sm:max-h-[38rem] sm:space-y-4">
+            {activeLoans.length > 0 ? activeLoans.map((transaction: any) => {
+              const book = data.books.find((candidate: any) => candidate._id === transaction.bookId);
+              const branch = data.branches.find((candidate: any) => candidate._id === transaction.branchId);
+              const overdue = transaction.status === "OVERDUE";
+
+              return (
+                <div
+                  key={transaction._id}
+                  className={`rounded-[1.25rem] border p-4 sm:rounded-[1.5rem] sm:p-5 ${
+                    overdue
+                      ? "border-rose-200 bg-rose-50/80 dark:border-rose-500/20 dark:bg-rose-500/10"
+                      : "border-slate-200/80 bg-white/70 dark:border-white/10 dark:bg-white/5"
+                  }`}
+                >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.3em] text-cyan-600 dark:text-cyan-300">
+                          {book?.category || "Borrowed book"}
+                        </p>
+                        <h3 className="mt-2 text-lg font-semibold sm:text-xl">{book?.title || "Unknown title"}</h3>
+                        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 sm:text-sm">
+                          {book?.author || "Unknown author"}{branch ? ` | ${branch.name}` : ""}
+                        </p>
+                      </div>
+                    <span className={`w-fit rounded-full px-3 py-1.5 text-xs font-medium sm:px-4 sm:py-2 sm:text-sm ${
+                      overdue
+                        ? "bg-rose-500/15 text-rose-700 dark:text-rose-200"
+                        : "bg-cyan-500/10 text-cyan-700 dark:text-cyan-200"
+                    }`}>
+                      {formatTimeLeft(transaction.dueDate)}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid gap-2 text-xs text-slate-600 dark:text-slate-300 sm:grid-cols-3 sm:gap-3 sm:text-sm">
+                    <div className="rounded-xl bg-slate-100/80 px-3 py-2.5 dark:bg-slate-950/40 sm:rounded-2xl sm:px-4 sm:py-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Issued</p>
+                      <p className="mt-2 font-medium">{new Date(transaction.issuedAt).toLocaleDateString()}</p>
+                    </div>
+                    <div className="rounded-xl bg-slate-100/80 px-3 py-2.5 dark:bg-slate-950/40 sm:rounded-2xl sm:px-4 sm:py-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Return By</p>
+                      <p className="mt-2 font-medium">{new Date(transaction.dueDate).toLocaleDateString()}</p>
+                    </div>
+                    <div className="rounded-xl bg-slate-100/80 px-3 py-2.5 dark:bg-slate-950/40 sm:rounded-2xl sm:px-4 sm:py-3">
+                      <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Fine</p>
+                      <p className="mt-2 font-medium">${transaction.fineAmount}</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            }) : (
+              <div className="rounded-[1.5rem] border border-dashed border-slate-300/80 p-5 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
+                You do not have any borrowed books right now.
+              </div>
+            )}
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
         {[
           ["Books", data.dashboard.totals.books],
           ["Active Loans", data.dashboard.totals.activeLoans],
           ["Overdue", data.dashboard.totals.overdueBooks],
           ["Fine Revenue", `$${data.dashboard.totals.fineRevenue}`],
         ].map(([label, value]) => (
-          <div key={label} className="rounded-[1.5rem] border border-slate-200/80 bg-white/80 p-5 dark:border-white/10 dark:bg-white/5">
-            <p className="text-sm text-slate-500 dark:text-slate-400">{label}</p>
-            <p className="mt-3 text-3xl font-semibold">{value}</p>
+          <div key={label} className="rounded-[1.25rem] border border-slate-200/80 bg-white/80 p-4 dark:border-white/10 dark:bg-white/5 sm:rounded-[1.5rem] sm:p-5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 sm:text-sm">{label}</p>
+            <p className="mt-2 text-xl font-semibold sm:mt-3 sm:text-3xl">{value}</p>
           </div>
         ))}
       </div>
       <div className="grid gap-6 xl:grid-cols-2">
         <Card title="Most Borrowed" text="Trending books across branches.">
-          <div className="space-y-3">
+          <div className="max-h-[24rem] space-y-3 overflow-y-auto pr-1">
             {data.dashboard.mostBorrowedBooks.map((item: any) => (
               <div key={item.bookId} className="flex items-center justify-between rounded-2xl bg-slate-100/80 px-4 py-3 dark:bg-white/5">
                 <span>{item.title}</span>
@@ -183,7 +388,7 @@ function Dashboard({ data }: { data: any }) {
           </div>
         </Card>
         <Card title="Overdue Snapshot" text="Books requiring follow-up.">
-          <div className="space-y-3">
+          <div className="max-h-[24rem] space-y-3 overflow-y-auto pr-1">
             {data.dashboard.overdueItems.map((item: any) => {
               const book = data.books.find((candidate: any) => candidate._id === item.bookId);
               return (
@@ -227,19 +432,20 @@ function Catalog({ data, canWrite, actions }: { data: any; canWrite: boolean; ac
     <div className="space-y-6">
       <Card title="Catalog" text="Search books, manage inventory, and access digital resources.">
         <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search title, author, ISBN" />
-        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+        <div className="mt-4 max-h-[38rem] overflow-y-auto pr-1 sm:mt-5 sm:max-h-[42rem]">
+          <div className="grid gap-4 lg:grid-cols-2">
           {filtered.map((book: any) => (
-            <div key={book._id} className="rounded-[1.5rem] border border-slate-200/80 p-5 dark:border-white/10">
-              <div className="flex items-start justify-between gap-4">
+            <div key={book._id} className="rounded-[1.25rem] border border-slate-200/80 p-4 dark:border-white/10 sm:rounded-[1.5rem] sm:p-5">
+              <div className="flex items-start justify-between gap-3 sm:gap-4">
                 <div>
                   <p className="text-xs uppercase tracking-[0.3em] text-cyan-600 dark:text-cyan-300">{book.category}</p>
-                  <h3 className="mt-2 text-xl font-semibold">{book.title}</h3>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">{book.author}</p>
+                  <h3 className="mt-2 text-lg font-semibold sm:text-xl">{book.title}</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 sm:text-sm">{book.author}</p>
                 </div>
-                <span className="rounded-full bg-cyan-500/10 px-3 py-1 text-sm">{book.availableCopies}/{book.totalCopies}</span>
+                <span className="rounded-full bg-cyan-500/10 px-2.5 py-1 text-xs sm:px-3 sm:text-sm">{book.availableCopies}/{book.totalCopies}</span>
               </div>
-              <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{book.description}</p>
-              <div className="mt-4 flex flex-wrap gap-3">
+              <p className="mt-3 line-clamp-3 text-xs text-slate-600 dark:text-slate-300 sm:text-sm">{book.description}</p>
+              <div className="mt-4 flex flex-wrap gap-2 sm:gap-3">
                 <Button variant="outline" disabled={actions.reserveBook.isPending} onClick={() => actions.reserveBook.mutate(book._id)}>
                   {actions.reserveBook.isPending ? "Reserving..." : "Reserve"}
                 </Button>
@@ -252,6 +458,7 @@ function Catalog({ data, canWrite, actions }: { data: any; canWrite: boolean; ac
               </div>
             </div>
           ))}
+          </div>
         </div>
       </Card>
       {canWrite ? (
@@ -294,7 +501,7 @@ function Circulation({ data, actions }: { data: any; actions: any }) {
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-2 sm:gap-6">
         <Card title="Issue Book" text="Use role-aware circulation with due dates and member selection.">
           <div className="grid gap-4">
             <select value={issue.userId} onChange={(e) => setIssue({ ...issue, userId: e.target.value })} className="rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-slate-950">
@@ -322,7 +529,7 @@ function Circulation({ data, actions }: { data: any; actions: any }) {
         </Card>
       </div>
       <Card title="Transaction Ledger" text="Track issues, returns, overdue items, and fines.">
-        <div className="overflow-x-auto">
+        <div className="max-h-[24rem] overflow-auto sm:max-h-[30rem]">
           <table className="min-w-full text-sm">
             <thead className="text-left text-slate-500 dark:text-slate-400">
               <tr>
@@ -363,20 +570,22 @@ function Recommendations({ data, actions }: { data: any; actions: any }) {
   return (
     <div className="space-y-6">
       <Card title="Recommendations" text="Borrowing history, category affinity, and ratings guide these suggestions.">
-        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
-          {data.recommendations.map((book: any) => (
-            <div key={book._id} className="rounded-[1.5rem] border border-slate-200/80 p-5 dark:border-white/10">
-              <p className="text-xs uppercase tracking-[0.3em] text-cyan-600 dark:text-cyan-300">{book.category}</p>
-              <h3 className="mt-3 text-lg font-semibold">{book.title}</h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400">{book.author}</p>
-              <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{book.description}</p>
-            </div>
-          ))}
+        <div className="max-h-[28rem] overflow-y-auto pr-1 sm:max-h-[32rem]">
+          <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+            {data.recommendations.map((book: any) => (
+              <div key={book._id} className="rounded-[1.25rem] border border-slate-200/80 p-4 dark:border-white/10 sm:rounded-[1.5rem] sm:p-5">
+                <p className="text-xs uppercase tracking-[0.3em] text-cyan-600 dark:text-cyan-300">{book.category}</p>
+                <h3 className="mt-3 text-base font-semibold sm:text-lg">{book.title}</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 sm:text-sm">{book.author}</p>
+                <p className="mt-3 line-clamp-4 text-xs text-slate-600 dark:text-slate-300 sm:text-sm">{book.description}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </Card>
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-2 sm:gap-6">
         <Card title="Review & Rating" text="Feedback powers discovery and catalog quality signals.">
-          <div className="grid gap-4">
+          <div className="grid gap-3 sm:gap-4">
             <select value={bookId} onChange={(e) => setBookId(e.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-slate-950">
               {data.books.map((book: any) => <option key={book._id} value={book._id}>{book.title}</option>)}
             </select>
@@ -388,14 +597,14 @@ function Recommendations({ data, actions }: { data: any; actions: any }) {
           </div>
         </Card>
         <Card title="Recent Reviews" text="Community feedback across physical and digital titles.">
-          <div className="space-y-3">
+          <div className="max-h-[22rem] space-y-3 overflow-y-auto pr-1 sm:max-h-[28rem]">
             {data.reviews.map((review: any) => {
               const book = data.books.find((candidate: any) => candidate._id === review.bookId);
               return (
-                <div key={review._id} className="rounded-2xl bg-slate-100/80 p-4 dark:bg-white/5">
+                <div key={review._id} className="rounded-xl bg-slate-100/80 p-3 dark:bg-white/5 sm:rounded-2xl sm:p-4">
                   <p className="font-medium">{book?.title}</p>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">{review.rating}/5</p>
-                  <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{review.comment}</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 sm:text-sm">{review.rating}/5</p>
+                  <p className="mt-2 text-xs text-slate-600 dark:text-slate-300 sm:text-sm">{review.comment}</p>
                 </div>
               );
             })}
@@ -406,39 +615,140 @@ function Recommendations({ data, actions }: { data: any; actions: any }) {
   );
 }
 
+type ChatMessage = {
+  id: string;
+  role: "assistant" | "user";
+  content: string;
+};
+
 function Assistant({ data, actions }: { data: any; actions: any }) {
-  const [message, setMessage] = useState("Recommend software engineering books");
-  const reply = actions.askAssistant.data;
+  const [message, setMessage] = useState("");
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: "assistant-welcome",
+      role: "assistant",
+      content:
+        "Hi, I can help you check book availability, digital copies, reservations, due dates, and recommendations. Ask me something like 'Is Clean Code available?' or 'Show my overdue books'.",
+    },
+  ]);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const quickPrompts = [
+    "Is Clean Code available?",
+    "Show my overdue books",
+    "Recommend software engineering books",
+    "Which digital books are available?",
+  ];
+
+  useEffect(() => {
+    if (!actions.askAssistant.data) return;
+    setMessages((current) => [
+      ...current,
+      {
+        id: `assistant-${Date.now()}`,
+        role: "assistant",
+        content: actions.askAssistant.data.reply,
+      },
+    ]);
+  }, [actions.askAssistant.data]);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages, actions.askAssistant.isPending]);
+
+  const sendMessage = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || actions.askAssistant.isPending) return;
+
+    setMessages((current) => [
+      ...current,
+      {
+        id: `user-${Date.now()}`,
+        role: "user",
+        content: trimmed,
+      },
+    ]);
+    setMessage("");
+    actions.askAssistant.mutate(trimmed);
+  };
 
   return (
-    <div className="space-y-6">
-      <Card title="AI Assistant" text="Ask about books, availability, overdue items, or recommendations.">
-        <div className="grid gap-4">
-          <Textarea rows={4} value={message} onChange={(e) => setMessage(e.target.value)} />
-          <Button className="w-fit" disabled={actions.askAssistant.isPending} onClick={() => actions.askAssistant.mutate(message)}>
-            {actions.askAssistant.isPending ? "Thinking..." : "Ask assistant"}
-          </Button>
-        </div>
-      </Card>
-      <Card title="Assistant Reply" text="Context-aware answers with suggested titles.">
-        <p className="text-sm leading-7 text-slate-600 dark:text-slate-300">{reply?.reply || "Ask a question to start the assistant."}</p>
-        <div className="mt-5 grid gap-4 lg:grid-cols-3">
-          {(reply?.suggestedBooks || data.recommendations).map((book: any) => (
-            <div key={book._id} className="rounded-2xl border border-slate-200/70 p-4 dark:border-white/10">
-              <p className="font-medium">{book.title}</p>
-              <p className="text-sm text-slate-500 dark:text-slate-400">{book.author}</p>
-            </div>
+    <Card title="Library Assistant" text="Chat naturally about books, availability, recommendations, dues, reservations, and digital access.">
+      <div className="grid gap-4 sm:gap-5">
+        <div className="flex flex-wrap gap-2">
+          {quickPrompts.map((prompt) => (
+            <button
+              key={prompt}
+              type="button"
+              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-cyan-400 hover:text-cyan-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200 dark:hover:border-cyan-400 dark:hover:text-cyan-200 sm:px-4 sm:py-2 sm:text-sm"
+              onClick={() => sendMessage(prompt)}
+            >
+              {prompt}
+            </button>
           ))}
         </div>
-      </Card>
-    </div>
+
+        <div
+          ref={scrollRef}
+          className="max-h-[26rem] min-h-[19rem] space-y-3 overflow-y-auto rounded-[1.5rem] border border-slate-200/80 bg-slate-50/80 p-3 dark:border-white/10 dark:bg-slate-950/40 sm:max-h-[30rem] sm:min-h-[24rem] sm:space-y-4 sm:rounded-[1.75rem] sm:p-4"
+        >
+          {messages.map((entry) => (
+            <div
+              key={entry.id}
+              className={`flex ${entry.role === "user" ? "justify-end" : "justify-start"}`}
+            >
+              <div
+                className={`max-w-[88%] rounded-[1.25rem] px-3 py-2.5 text-xs leading-6 shadow-sm sm:max-w-[85%] sm:rounded-[1.5rem] sm:px-4 sm:py-3 sm:text-sm sm:leading-7 ${
+                  entry.role === "user"
+                    ? "bg-cyan-400 text-slate-950"
+                    : "border border-slate-200/80 bg-white text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
+                }`}
+              >
+                {entry.content}
+              </div>
+            </div>
+          ))}
+          {actions.askAssistant.isPending ? (
+            <div className="flex justify-start">
+              <div className="rounded-[1.5rem] border border-slate-200/80 bg-white px-4 py-3 text-sm text-slate-500 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-slate-300">
+                Thinking...
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="rounded-[1.5rem] border border-slate-200/80 bg-white p-3 shadow-sm dark:border-white/10 dark:bg-white/5 sm:rounded-[1.75rem]">
+          <div className="grid gap-3">
+            <Textarea
+              rows={3}
+              value={message}
+              placeholder="Ask about availability, reservations, overdue fines, digital copies, or recommendations..."
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMessage(message);
+                }
+              }}
+            />
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Press Enter to send, Shift+Enter for a new line.
+              </p>
+              <Button className="rounded-2xl" disabled={actions.askAssistant.isPending || !message.trim()} onClick={() => sendMessage(message)}>
+                {actions.askAssistant.isPending ? "Sending..." : "Send"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }
 
 function Members({ data, actions }: { data: any; actions: any }) {
   return (
     <Card title="Members & Roles" text="Manage admins, librarians, students, and branch access.">
-      <div className="overflow-x-auto">
+      <div className="max-h-[34rem] overflow-auto">
         <table className="min-w-full text-sm">
           <thead className="text-left text-slate-500 dark:text-slate-400">
             <tr>
@@ -497,7 +807,7 @@ function Admin({ data, actions }: { data: any; actions: any }) {
             {actions.deleteAllNotifications.isPending ? "Deleting..." : "Delete all"}
           </Button>
         </div>
-        <div className="space-y-3">
+        <div className="max-h-[28rem] space-y-3 overflow-y-auto pr-1">
           {data.notifications.map((notification: any) => (
             <div key={notification._id} className="rounded-2xl bg-slate-100/80 p-4 dark:bg-white/5">
               <div className="flex items-start justify-between gap-4">
@@ -525,7 +835,7 @@ function Admin({ data, actions }: { data: any; actions: any }) {
         </div>
       </Card>
       <Card title="Audit Trail" text="Track catalog actions, circulation, and role changes.">
-        <div className="space-y-3">
+        <div className="max-h-[28rem] space-y-3 overflow-y-auto pr-1">
           {data.auditLogs.map((log: any) => (
             <div key={log._id} className="rounded-2xl border border-slate-200/70 p-4 dark:border-white/10">
               <p className="font-medium">{log.action}</p>
@@ -565,7 +875,7 @@ function Workspace() {
     ...(isAdmin || isLibrarian ? [{ href: "/circulation", label: "Circulation" }] : []),
     { href: "/recommendations", label: "Recommendations" },
     { href: "/assistant", label: "Assistant" },
-    ...(isAdmin || isLibrarian ? [{ href: "/members", label: "Members" }] : []),
+    ...(isAdmin ? [{ href: "/members", label: "Members" }] : []),
     ...(isAdmin ? [{ href: "/admin", label: "Admin" }] : []),
   ];
 
@@ -573,20 +883,28 @@ function Workspace() {
     <div className="min-h-screen bg-[linear-gradient(135deg,#f8fafc,#eef2ff,#ecfeff)] text-slate-950 dark:bg-[linear-gradient(135deg,#020617,#0f172a,#111827)] dark:text-white">
       <div className="flex min-h-screen">
         <Sidebar theme={theme} onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")} />
-        <main className="flex-1 p-4 md:p-8">
+        <main className="min-w-0 flex-1 p-3 sm:p-4 md:p-8">
           <div className="mx-auto max-w-7xl">
             <MobileSidebar theme={theme} onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")} />
-            <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div className="mb-4 flex flex-col gap-3 md:mb-6 md:flex-row md:items-end md:justify-between md:gap-4">
               <div>
-                <p className="text-sm uppercase tracking-[0.35em] text-cyan-600 dark:text-cyan-300">LibraryHub</p>
-                <h1 className="mt-2 text-4xl font-semibold tracking-tight">Library Management System</h1>
-                <p className="mt-2 max-w-3xl text-slate-600 dark:text-slate-300">
+                <p className="text-[11px] uppercase tracking-[0.28em] text-cyan-600 dark:text-cyan-300 sm:text-sm sm:tracking-[0.35em]">LibraryHub</p>
+                <h1 className="mt-1.5 text-2xl font-semibold tracking-tight sm:mt-2 sm:text-4xl">Library Management System</h1>
+                <p className="mt-1.5 max-w-3xl text-sm text-slate-600 dark:text-slate-300 sm:mt-2 sm:text-base">
                   A modern full-stack workspace for books, users, fines, reservations, reviews, analytics, and digital reading.
                 </p>
               </div>
-              <select value={location} onChange={(e) => setLocation(e.target.value)} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 md:hidden dark:border-white/10 dark:bg-slate-950">
-                {nav.map((item) => <option key={item.href} value={item.href}>{item.label}</option>)}
-              </select>
+              <div className="flex w-full items-center justify-between gap-3 md:w-auto md:justify-end">
+                <div className="hidden md:block">
+                  <NotificationBell data={data} />
+                </div>
+                <select value={location} onChange={(e) => setLocation(e.target.value)} className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 md:hidden dark:border-white/10 dark:bg-slate-950">
+                  {nav.map((item) => <option key={item.href} value={item.href}>{item.label}</option>)}
+                </select>
+                <div className="ml-auto md:hidden">
+                  <NotificationBell data={data} />
+                </div>
+              </div>
             </div>
 
             <Switch>
@@ -595,7 +913,7 @@ function Workspace() {
               {isAdmin || isLibrarian ? <Route path="/circulation"><Circulation data={data} actions={actions} /></Route> : null}
               <Route path="/recommendations"><Recommendations data={data} actions={actions} /></Route>
               <Route path="/assistant"><Assistant data={data} actions={actions} /></Route>
-              {isAdmin || isLibrarian ? <Route path="/members"><Members data={data} actions={actions} /></Route> : null}
+              {isAdmin ? <Route path="/members"><Members data={data} actions={actions} /></Route> : null}
               {isAdmin ? <Route path="/admin"><Admin data={data} actions={actions} /></Route> : null}
               <Route>
                 <div className="rounded-[2rem] border border-slate-200/80 bg-white/80 p-8 dark:border-white/10 dark:bg-white/5">
