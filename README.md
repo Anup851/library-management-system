@@ -15,12 +15,6 @@ Modern full-stack library management platform built with React, Tailwind CSS, Ex
 - Audit trail and notification center
 - Responsive UI with dark and light modes
 
-## Demo Accounts
-
-- `admin@libraryhub.local` / `admin123`
-- `librarian@libraryhub.local` / `librarian123`
-- `student@libraryhub.local` / `student123`
-
 ## Tech Stack
 
 - Frontend: React + Tailwind CSS + React Query + Wouter
@@ -48,21 +42,6 @@ docs/
   library-api.md
 ```
 
-## Environment
-
-Create a `.env` file with:
-
-```env
-PORT=5000
-JWT_SECRET=change-me
-DAILY_FINE=5
-SUPABASE_URL=https://your-project-ref.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-```
-
-`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are optional for quick local evaluation. If either is omitted, the app uses the seeded JSON fallback store.
-
-Before starting with Supabase, run the SQL in [supabase/schema.sql](./supabase/schema.sql) inside the Supabase SQL editor to create the tables used by the Express API.
 
 ## Run Locally
 
