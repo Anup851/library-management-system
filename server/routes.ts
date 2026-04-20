@@ -8,6 +8,7 @@ import {
   createReviewSchema,
   issueBookSchema,
   loginSchema,
+  returnBookSchema,
   updateBookSchema,
   updateUserRoleSchema,
   type AuditLog,
@@ -136,7 +137,7 @@ function getDashboardData(books: Book[], users: User[], transactions: Transactio
 
 function recommendBooks(currentUser: User, books: Book[]) {
   const historyCategories = new Map<string, number>();
-  for (const bookId of currentUser.borrowingHistory) {
+  for (const bookId of currentUser.borrowingHistory || []) {
     const matchedBook = books.find((book) => book._id === bookId);
     if (matchedBook) {
       historyCategories.set(matchedBook.category, (historyCategories.get(matchedBook.category) || 0) + 1);
@@ -161,6 +162,29 @@ function formatBookAvailability(book: Book, branches: { _id: string; name: strin
   return `${book.title} by ${book.author} has ${book.availableCopies} of ${book.totalCopies} copies available. ${locationText}. ${digitalText}`;
 }
 
+function formatBookCard(book: Book, branches: { _id: string; name: string }[]) {
+  const branchNames = branches
+    .filter((branch) => book.branchIds.includes(branch._id))
+    .map((branch) => branch.name);
+
+  const lines = [
+    `${book.title} by ${book.author}`,
+    `Category: ${book.category}`,
+    `Copies: ${book.availableCopies}/${book.totalCopies} available`,
+    `Format: ${book.format}`,
+  ];
+
+  if (branchNames.length > 0) {
+    lines.push(`Branches: ${branchNames.join(", ")}`);
+  }
+
+  if (book.ebookUrl) {
+    lines.push("Digital copy available");
+  }
+
+  return lines.join("\n");
+}
+
 function buildChatResponse(
   message: string,
   books: Book[],
@@ -182,6 +206,29 @@ function buildChatResponse(
     const haystack = `${book.title} ${book.author} ${book.category} ${book.isbn} ${book.barcode}`.toLowerCase();
     return normalized.length > 1 && haystack.includes(normalized);
   });
+  const categoryMatches = books.filter((book) => normalized.includes(book.category.toLowerCase())).slice(0, 5);
+  const greetingIntent = ["hi", "hello", "hey", "hii", "help", "who are you"].some((term) => normalized === term || normalized.startsWith(`${term} `));
+  const dueSoonLoans = [...userLoans]
+    .filter((transaction) => transaction.status === "ISSUED")
+    .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+    .slice(0, 3);
+
+  if (greetingIntent) {
+    const nextDueLoan = dueSoonLoans[0];
+    const nextDueBook = nextDueLoan
+      ? books.find((candidate) => candidate._id === nextDueLoan.bookId)
+      : null;
+
+    return {
+      reply: [
+        `Hi ${currentUser.name.split(" ")[0]}, I can help with availability, your borrowed books, reservations, overdue fines, digital titles, and smart recommendations.`,
+        nextDueLoan && nextDueBook
+          ? `Your next due book is ${nextDueBook.title} on ${new Date(nextDueLoan.dueDate).toLocaleDateString()}.`
+          : "You can ask things like: ask with AI about my borrowed books, show digital books, or recommend technology titles.",
+      ].join("\n\n"),
+      suggestedBooks: recommendations,
+    };
+  }
 
   if (normalized.includes("overdue") || normalized.includes("fine")) {
     if (overdueLoans.length === 0) {
@@ -194,12 +241,12 @@ function buildChatResponse(
     const summary = overdueLoans
       .map((loan) => {
         const book = books.find((candidate) => candidate._id === loan.bookId);
-        return `${book?.title || "Unknown title"} is overdue with a current fine of $${loan.fineAmount}.`;
+        return `- ${book?.title || "Unknown title"}: overdue with a current fine of $${loan.fineAmount}`;
       })
-      .join(" ");
+      .join("\n");
 
     return {
-      reply: summary,
+      reply: `You currently have ${overdueLoans.length} overdue book${overdueLoans.length === 1 ? "" : "s"}.\n\n${summary}`,
       suggestedBooks: overdueLoans
         .map((loan) => books.find((candidate) => candidate._id === loan.bookId))
         .filter(Boolean) as Book[],
@@ -209,7 +256,7 @@ function buildChatResponse(
   if (normalized.includes("available") || normalized.includes("availability") || normalized.includes("copy")) {
     const targetBooks = matchingBooks.length > 0 ? matchingBooks : books.filter((book) => book.availableCopies > 0).slice(0, 3);
     const reply = targetBooks.length > 0
-      ? targetBooks.map((book) => formatBookAvailability(book, branches)).join(" ")
+      ? targetBooks.map((book) => formatBookCard(book, branches)).join("\n\n")
       : "I could not find an available copy for that search. Try another title, author, or category.";
 
     return {
@@ -222,15 +269,19 @@ function buildChatResponse(
     const digitalBooks = (matchingBooks.length > 0 ? matchingBooks : books.filter((book) => Boolean(book.ebookUrl))).slice(0, 4);
     return {
       reply: digitalBooks.length > 0
-        ? digitalBooks.map((book) => `${book.title} has a digital copy ready to open.`).join(" ")
+        ? digitalBooks.map((book) => `- ${book.title} by ${book.author} has a digital copy ready to open.`).join("\n")
         : "I could not find a digital title for that search.",
       suggestedBooks: digitalBooks,
     };
   }
 
   if (normalized.includes("recommend") || normalized.includes("suggest")) {
+    const recommendedSummary = recommendations
+      .map((book) => `- ${book.title} by ${book.author} (${book.category})`)
+      .join("\n");
+
     return {
-      reply: "I used borrowing history, ratings, and category fit to prepare a few suggestions. You can ask me for software, fiction, self-improvement, or digital book recommendations too.",
+      reply: `I used your history, category fit, and ratings to prepare stronger suggestions.\n\n${recommendedSummary || "No tailored suggestions yet, but I can still recommend by category, author, or format."}`,
       suggestedBooks: recommendations,
     };
   }
@@ -247,9 +298,9 @@ function buildChatResponse(
       reply: userLoans
         .map((loan) => {
           const book = books.find((candidate) => candidate._id === loan.bookId);
-          return `${book?.title || "Unknown title"} is due on ${new Date(loan.dueDate).toLocaleDateString()}.`;
+          return `- ${book?.title || "Unknown title"} is due on ${new Date(loan.dueDate).toLocaleDateString()}.`;
         })
-        .join(" "),
+        .join("\n"),
       suggestedBooks: userLoans
         .map((loan) => books.find((candidate) => candidate._id === loan.bookId))
         .filter(Boolean) as Book[],
@@ -269,9 +320,9 @@ function buildChatResponse(
         reply: matchingBooks
           .map((book) => {
             const queue = reservations.filter((reservation) => reservation.bookId === book._id && reservation.status === "WAITING");
-            return `${book.title} currently has ${queue.length} waiting reservation${queue.length === 1 ? "" : "s"}.`;
+            return `- ${book.title} currently has ${queue.length} waiting reservation${queue.length === 1 ? "" : "s"}.`;
           })
-          .join(" "),
+          .join("\n"),
         suggestedBooks: matchingBooks.slice(0, 4),
       };
     }
@@ -280,30 +331,44 @@ function buildChatResponse(
       reply: waitingReservations
         .map((reservation) => {
           const book = books.find((candidate) => candidate._id === reservation.bookId);
-          return `${book?.title || "Unknown title"} is in your reservation list with status ${reservation.status.toLowerCase()}.`;
+          return `- ${book?.title || "Unknown title"} is in your reservation list with status ${reservation.status.toLowerCase()}.`;
         })
-        .join(" "),
+        .join("\n"),
       suggestedBooks: waitingReservations
         .map((reservation) => books.find((candidate) => candidate._id === reservation.bookId))
         .filter(Boolean) as Book[],
     };
   }
 
+  if (normalized.includes("category") || normalized.includes("subject") || categoryMatches.length > 0) {
+    const targetBooks = categoryMatches.length > 0 ? categoryMatches : recommendations;
+    return {
+      reply: targetBooks.length > 0
+        ? targetBooks.map((book) => `- ${book.title} by ${book.author} in ${book.category}`).join("\n")
+        : "I could not find matching categories yet. Try a category like fiction, programming, self improvement, or technology.",
+      suggestedBooks: targetBooks.slice(0, 4),
+    };
+  }
+
   if (matchingBooks.length > 0) {
     return {
-      reply: matchingBooks.map((book) => formatBookAvailability(book, branches)).join(" "),
+      reply: matchingBooks.map((book) => formatBookCard(book, branches)).join("\n\n"),
       suggestedBooks: matchingBooks.slice(0, 4),
     };
   }
 
   return {
-    reply: "I can help with book availability, due dates, overdue fines, digital books, reservations, and recommendations. Try asking things like 'Is Clean Code available?', 'What books do I have borrowed?', or 'Show digital books for DBMS'.",
+    reply: "Hi, I can help you manage library tasks at a top level. Ask with AI about availability, your borrowed books, reservations, overdue fines, digital titles, categories, or smart recommendations.",
     suggestedBooks: recommendations,
   };
 }
 
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 function writeAudit(logs: AuditLog[], actorId: string, action: string, entity: string, entityId: string, details: Record<string, unknown> = {}) {
-  logs.unshift({
+  const auditLog = {
     _id: makeId("log"),
     actorId,
     action,
@@ -311,11 +376,13 @@ function writeAudit(logs: AuditLog[], actorId: string, action: string, entity: s
     entityId,
     details,
     createdAt: nowIso(),
-  });
+  };
+  logs.unshift(auditLog);
+  return auditLog;
 }
 
 function notify(notifications: Notification[], userId: string, title: string, message: string, channel: Notification["channel"] = "in_app") {
-  notifications.unshift({
+  const notification = {
     _id: makeId("notification"),
     userId,
     title,
@@ -323,7 +390,29 @@ function notify(notifications: Notification[], userId: string, title: string, me
     channel,
     read: false,
     createdAt: nowIso(),
-  });
+  };
+  notifications.unshift(notification);
+  return notification;
+}
+
+function notifyStaff(state: Awaited<ReturnType<typeof readState>>, title: string, message: string) {
+  return state.users
+    .filter((user) => user.role === "admin" || user.role === "librarian")
+    .map((user) => notify(state.notifications, user._id, title, message));
+}
+
+function normalizeBookCopies(book: Book) {
+  book.totalCopies = Math.max(0, book.totalCopies);
+  book.availableCopies = Math.min(Math.max(0, book.availableCopies), book.totalCopies);
+}
+
+function reindexReservationQueue(reservations: Reservation[], bookId: string) {
+  reservations
+    .filter((reservation) => reservation.bookId === bookId && reservation.status === "WAITING")
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .forEach((reservation, index) => {
+      reservation.position = index + 1;
+    });
 }
 
 function currentUserOrThrow(req: AuthenticatedRequest, users: User[]) {
@@ -336,7 +425,24 @@ function currentUserOrThrow(req: AuthenticatedRequest, users: User[]) {
 
 function userVisibleTransactions(role: Role, userId: string, transactions: Transaction[]) {
   if (isStaff(role)) return transactions;
-  return transactions.filter((transaction) => transaction.userId === userId);
+  return transactions.filter((transaction) => transaction.userId === userId && transaction.status !== "RETURNED");
+}
+
+function userVisibleReservations(role: Role, userId: string, reservations: Reservation[]) {
+  if (isStaff(role)) return reservations;
+  return reservations.filter(
+    (reservation) => reservation.userId === userId && (reservation.status === "WAITING" || reservation.status === "READY"),
+  );
+}
+
+function userVisibleNotifications(role: Role, userId: string, notifications: Notification[]) {
+  if (isStaff(role)) return notifications;
+  return notifications.filter((notification) => notification.userId === userId);
+}
+
+function userVisibleUsers(role: Role, userId: string, users: User[]) {
+  if (isStaff(role)) return users;
+  return users.filter((user) => user._id === userId);
 }
 
 function getSupabaseAuthClient() {
@@ -354,6 +460,323 @@ function getSupabaseAuthClient() {
   }
 
   return authClient;
+}
+
+function shouldUseDirectSupabasePersistence() {
+  return Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
+}
+
+async function persistReturnDirect(
+  transaction: Transaction,
+  book: Book,
+  user: User | undefined,
+  notifications: Notification[],
+  auditLog?: AuditLog,
+) {
+  const client = getSupabaseAuthClient();
+
+  let transactionError: Error | null = null;
+  let shouldUseLookupFallback = !isUuid(transaction._id) || !isUuid(book._id) || !isUuid(transaction.userId);
+
+  if (!shouldUseLookupFallback) {
+    const directUpdate = await client.from("transactions").update({
+      returned_at: transaction.returnedAt || null,
+      returned_to: transaction.returnedTo || null,
+      fine_amount: transaction.fineAmount,
+      status: transaction.status,
+    }).eq("id", transaction._id);
+    transactionError = directUpdate.error;
+
+    if (transactionError && transaction.returnedTo) {
+      const retry = await client.from("transactions").update({
+        returned_at: transaction.returnedAt || null,
+        returned_to: null,
+        fine_amount: transaction.fineAmount,
+        status: transaction.status,
+      }).eq("id", transaction._id);
+      transactionError = retry.error;
+    }
+
+    shouldUseLookupFallback = Boolean(transactionError);
+  }
+
+  if (shouldUseLookupFallback) {
+    if (!user?.email) {
+      throw new Error(transactionError?.message || "Unable to resolve the borrower profile for this return");
+    }
+
+    const { data: liveBook, error: liveBookError } = await client
+      .from("books")
+      .select("id")
+      .or(`isbn.eq.${book.isbn},barcode.eq.${book.barcode}`)
+      .limit(1)
+      .maybeSingle();
+    if (liveBookError || !liveBook?.id) {
+      throw new Error(liveBookError?.message || "Unable to find the live book record for this return");
+    }
+
+    const { data: liveUser, error: liveUserError } = await client
+      .from("profiles")
+      .select("id")
+      .eq("email", user.email)
+      .limit(1)
+      .maybeSingle();
+    if (liveUserError || !liveUser?.id) {
+      throw new Error(liveUserError?.message || "Unable to find the live borrower profile for this return");
+    }
+
+    const { data: liveTransaction, error: liveTransactionError } = await client
+      .from("transactions")
+      .select("id")
+      .eq("book_id", liveBook.id)
+      .eq("user_id", liveUser.id)
+      .in("status", ["ISSUED", "OVERDUE"])
+      .order("issued_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (liveTransactionError || !liveTransaction?.id) {
+      throw new Error(liveTransactionError?.message || "Unable to find the live transaction for this return");
+    }
+
+    const lookupUpdate = await client.from("transactions").update({
+      returned_at: transaction.returnedAt || null,
+      returned_to: transaction.returnedTo || null,
+      fine_amount: transaction.fineAmount,
+      status: transaction.status,
+    }).eq("id", liveTransaction.id);
+
+    transactionError = lookupUpdate.error;
+    if (transactionError && transaction.returnedTo) {
+      const retry = await client.from("transactions").update({
+        returned_at: transaction.returnedAt || null,
+        returned_to: null,
+        fine_amount: transaction.fineAmount,
+        status: transaction.status,
+      }).eq("id", liveTransaction.id);
+      transactionError = retry.error;
+    }
+
+    const { error: liveBookUpdateError } = await client.from("books").update({
+      available_copies: book.availableCopies,
+      updated_at: nowIso(),
+    }).eq("id", liveBook.id);
+    if (liveBookUpdateError) throw new Error(liveBookUpdateError.message);
+  }
+
+  if (transactionError && transaction.returnedTo) {
+    throw new Error(transactionError.message);
+  }
+  if (transactionError) throw new Error(transactionError.message);
+
+  if (!shouldUseLookupFallback) {
+    const { error: bookError } = await client.from("books").update({
+      available_copies: book.availableCopies,
+      updated_at: nowIso(),
+    }).eq("id", book._id);
+    if (bookError) throw new Error(bookError.message);
+  }
+
+  const validNotifications = notifications.filter((notification) => isUuid(notification.userId));
+  if (validNotifications.length > 0) {
+    const { error: notificationError } = await client.from("notifications").insert(validNotifications.map((notification) => ({
+      ...(isUuid(notification._id) ? { id: notification._id } : {}),
+      user_id: notification.userId,
+      title: notification.title,
+      message: notification.message,
+      channel: notification.channel,
+      read: notification.read,
+      created_at: notification.createdAt,
+    })));
+    if (notificationError) {
+      console.warn("Non-blocking notification write failed during return:", notificationError.message);
+    }
+  }
+
+  if (auditLog && isUuid(auditLog.actorId)) {
+    const { error: auditError } = await client.from("audit_logs").insert({
+      ...(isUuid(auditLog._id) ? { id: auditLog._id } : {}),
+      actor_id: auditLog.actorId,
+      action: auditLog.action,
+      entity: auditLog.entity,
+      entity_id: isUuid(auditLog.entityId) ? auditLog.entityId : null,
+      details: auditLog.details,
+      created_at: auditLog.createdAt,
+    });
+    if (auditError) {
+      console.warn("Non-blocking audit write failed during return:", auditError.message);
+    }
+  }
+}
+
+async function persistReservationDecisionDirect(
+  reservation: Reservation,
+  waitingReservations: Reservation[],
+  notifications: Notification[],
+  auditLog?: AuditLog,
+) {
+  const client = getSupabaseAuthClient();
+
+  const { error: reservationError } = await client.from("reservations").update({
+    status: reservation.status,
+    position: reservation.position,
+    notified_at: reservation.notifiedAt || null,
+  }).eq("id", reservation._id);
+  if (reservationError) throw new Error(reservationError.message);
+
+  if (waitingReservations.length > 0) {
+    const { error: queueError } = await client.from("reservations").upsert(waitingReservations.map((item) => ({
+      id: item._id,
+      book_id: item.bookId,
+      user_id: item.userId,
+      status: item.status,
+      position: item.position,
+      created_at: item.createdAt,
+      notified_at: item.notifiedAt || null,
+    })));
+    if (queueError) throw new Error(queueError.message);
+  }
+
+  const validNotifications = notifications.filter((notification) => isUuid(notification.userId));
+  if (validNotifications.length > 0) {
+    const { error: notificationError } = await client.from("notifications").insert(validNotifications.map((notification) => ({
+      ...(isUuid(notification._id) ? { id: notification._id } : {}),
+      user_id: notification.userId,
+      title: notification.title,
+      message: notification.message,
+      channel: notification.channel,
+      read: notification.read,
+      created_at: notification.createdAt,
+    })));
+    if (notificationError) {
+      console.warn("Non-blocking notification write failed during reservation decision:", notificationError.message);
+    }
+  }
+
+  if (auditLog && isUuid(auditLog.actorId)) {
+    const { error: auditError } = await client.from("audit_logs").insert({
+      ...(isUuid(auditLog._id) ? { id: auditLog._id } : {}),
+      actor_id: auditLog.actorId,
+      action: auditLog.action,
+      entity: auditLog.entity,
+      entity_id: isUuid(auditLog.entityId) ? auditLog.entityId : null,
+      details: auditLog.details,
+      created_at: auditLog.createdAt,
+    });
+    if (auditError) {
+      console.warn("Non-blocking audit write failed during reservation decision:", auditError.message);
+    }
+  }
+}
+
+async function persistIssueDirect(
+  transaction: Transaction,
+  book: Book,
+  user: User,
+  branch: { _id: string; code: string } | undefined,
+  fulfilledReservation: Reservation | undefined,
+  auditLog?: AuditLog,
+) {
+  const client = getSupabaseAuthClient();
+
+  const { data: liveBook, error: liveBookError } = await client
+    .from("books")
+    .select("id, available_copies")
+    .or(`isbn.eq.${book.isbn},barcode.eq.${book.barcode}`)
+    .limit(1)
+    .maybeSingle();
+  if (liveBookError || !liveBook?.id) {
+    throw new Error(liveBookError?.message || "Unable to find the live book record for this issue");
+  }
+
+  const { data: liveUser, error: liveUserError } = await client
+    .from("profiles")
+    .select("id")
+    .eq("email", user.email)
+    .limit(1)
+    .maybeSingle();
+  if (liveUserError || !liveUser?.id) {
+    throw new Error(liveUserError?.message || "Unable to find the live member profile for this issue");
+  }
+
+  let liveBranchId: string | null = null;
+  if (branch) {
+    if (isUuid(branch._id)) {
+      liveBranchId = branch._id;
+    } else {
+      const { data: liveBranch, error: liveBranchError } = await client
+        .from("branches")
+        .select("id")
+        .eq("code", branch.code)
+        .limit(1)
+        .maybeSingle();
+      if (liveBranchError || !liveBranch?.id) {
+        throw new Error(liveBranchError?.message || "Unable to find the live branch for this issue");
+      }
+      liveBranchId = liveBranch.id;
+    }
+  }
+
+  const { error: transactionError } = await client.from("transactions").insert({
+    ...(isUuid(transaction._id) ? { id: transaction._id } : {}),
+    book_id: liveBook.id,
+    user_id: liveUser.id,
+    branch_id: liveBranchId,
+    issued_by: isUuid(transaction.issuedBy) ? transaction.issuedBy : null,
+    issued_at: transaction.issuedAt,
+    due_date: transaction.dueDate,
+    fine_amount: transaction.fineAmount,
+    status: transaction.status,
+  });
+  if (transactionError) throw new Error(transactionError.message);
+
+  const liveAvailableCopies = typeof liveBook.available_copies === "number" ? liveBook.available_copies : book.availableCopies + 1;
+  const { error: bookError } = await client.from("books").update({
+    available_copies: Math.max(0, liveAvailableCopies - 1),
+    updated_at: nowIso(),
+  }).eq("id", liveBook.id);
+  if (bookError) throw new Error(bookError.message);
+
+  if (fulfilledReservation) {
+    let liveReservationId = isUuid(fulfilledReservation._id) ? fulfilledReservation._id : null;
+    if (!liveReservationId) {
+      const { data: liveReservation, error: liveReservationError } = await client
+        .from("reservations")
+        .select("id")
+        .eq("book_id", liveBook.id)
+        .eq("user_id", liveUser.id)
+        .in("status", ["WAITING", "READY"])
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (liveReservationError) {
+        throw new Error(liveReservationError.message);
+      }
+      liveReservationId = liveReservation?.id || null;
+    }
+
+    if (liveReservationId) {
+      const { error: reservationError } = await client.from("reservations").update({
+        status: "FULFILLED",
+        notified_at: fulfilledReservation.notifiedAt || null,
+      }).eq("id", liveReservationId);
+      if (reservationError) throw new Error(reservationError.message);
+    }
+  }
+
+  if (auditLog && isUuid(auditLog.actorId)) {
+    const { error: auditError } = await client.from("audit_logs").insert({
+      ...(isUuid(auditLog._id) ? { id: auditLog._id } : {}),
+      actor_id: auditLog.actorId,
+      action: auditLog.action,
+      entity: auditLog.entity,
+      entity_id: isUuid(auditLog.entityId) ? auditLog.entityId : null,
+      details: auditLog.details,
+      created_at: auditLog.createdAt,
+    });
+    if (auditError) {
+      console.warn("Non-blocking audit write failed during issue:", auditError.message);
+    }
+  }
 }
 
 async function upsertStudentProfile(
@@ -536,33 +959,36 @@ export function registerRoutes(app: Express) {
   });
 
   app.get("/api/bootstrap", requireAuth, async (req: AuthenticatedRequest, res) => {
-    const state = await readState();
-    state.transactions = updateTransactionStatuses(state.transactions);
-    await writeState(state);
+    try {
+      const state = await readState();
+      const transactionsWithComputedStatus = updateTransactionStatuses(state.transactions);
 
-    const safeUsers = state.users.map(publicUser);
-    const currentUser = currentUserOrThrow(req, safeUsers);
-    const transactions = userVisibleTransactions(currentUser.role, currentUser._id, state.transactions);
-    const reservations = currentUser.role === "student"
-      ? state.reservations.filter((reservation) => reservation.userId === currentUser._id)
-      : state.reservations;
-    const notifications = state.notifications.filter(
-      (notification) => currentUser.role !== "student" || notification.userId === currentUser._id,
-    );
+      const safeUsers = state.users.map(publicUser);
+      const currentUser = currentUserOrThrow(req, safeUsers);
+      const transactions = userVisibleTransactions(currentUser.role, currentUser._id, transactionsWithComputedStatus);
+      const reservations = userVisibleReservations(currentUser.role, currentUser._id, state.reservations);
+      const notifications = userVisibleNotifications(currentUser.role, currentUser._id, state.notifications);
+      const visibleUsers = userVisibleUsers(currentUser.role, currentUser._id, safeUsers);
+      const dashboardUsers = currentUser.role === "student" ? [currentUser] : safeUsers;
 
-    return res.json({
-      user: currentUser,
-      branches: state.branches,
-      users: safeUsers,
-      books: state.books,
-      transactions,
-      reservations,
-      reviews: state.reviews,
-      notifications,
-      auditLogs: currentUser.role === "admin" ? state.auditLogs.slice(0, 20) : [],
-      dashboard: getDashboardData(state.books, safeUsers, state.transactions, state.reservations),
-      recommendations: recommendBooks(currentUser, state.books),
-    });
+      return res.json({
+        user: currentUser,
+        branches: state.branches || [],
+        users: visibleUsers || [],
+        books: state.books || [],
+        transactions,
+        reservations,
+        reviews: state.reviews || [],
+        notifications,
+        auditLogs: currentUser.role === "admin" ? state.auditLogs.slice(0, 20) : [],
+        dashboard: getDashboardData(state.books || [], dashboardUsers || [], transactionsWithComputedStatus || [], reservations || []),
+        recommendations: recommendBooks(currentUser, state.books || []),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to load bootstrap data";
+      const status = message.includes("Authenticated user not found") ? 401 : 500;
+      return res.status(status).json({ message });
+    }
   });
 
   app.get("/api/books", requireAuth, async (req, res) => {
@@ -635,6 +1061,17 @@ export function registerRoutes(app: Express) {
   app.delete("/api/books/:id", requireAuth, requireRole(["admin"]), async (req: AuthenticatedRequest, res) => {
     const bookId = String(req.params.id);
     const state = await readState();
+    state.transactions = state.transactions.filter((transaction) => transaction.bookId !== bookId);
+    state.reservations = state.reservations.filter((reservation) => reservation.bookId !== bookId);
+    state.reviews = state.reviews.filter((review) => review.bookId !== bookId);
+    state.notifications = state.notifications.filter((notification) => {
+      const text = `${notification.title} ${notification.message}`.toLowerCase();
+      return !text.includes(bookId.toLowerCase());
+    });
+    state.auditLogs = state.auditLogs.filter((log) => {
+      if (log.entity === "book" && log.entityId === bookId) return false;
+      return log.details?.bookId !== bookId;
+    });
     state.books = state.books.filter((book) => book._id !== bookId);
     writeAudit(state.auditLogs, req.auth!.userId, "DELETE_BOOK", "book", bookId);
     await writeState(state);
@@ -667,7 +1104,6 @@ export function registerRoutes(app: Express) {
   app.get("/api/transactions", requireAuth, async (req: AuthenticatedRequest, res) => {
     const state = await readState();
     state.transactions = updateTransactionStatuses(state.transactions);
-    await writeState(state);
     const safeUsers = state.users.map(publicUser);
     const currentUser = currentUserOrThrow(req, safeUsers);
     return res.json(userVisibleTransactions(currentUser.role, currentUser._id, state.transactions));
@@ -691,13 +1127,15 @@ export function registerRoutes(app: Express) {
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
+      const actorExists = state.users.some((candidate) => candidate._id === req.auth!.userId);
+      const branch = state.branches.find((candidate) => candidate._id === input.branchId);
 
       const transaction: Transaction = {
         _id: makeId("txn"),
         bookId: book._id,
         userId: user._id,
         branchId: input.branchId,
-        issuedBy: req.auth!.userId,
+        issuedBy: actorExists ? req.auth!.userId : "",
         issuedAt: nowIso(),
         dueDate: input.dueDate,
         fineAmount: 0,
@@ -705,9 +1143,29 @@ export function registerRoutes(app: Express) {
       };
 
       book.availableCopies -= 1;
+      normalizeBookCopies(book);
       user.borrowingHistory = [book._id, ...user.borrowingHistory].slice(0, 20);
+      const matchingReservation = state.reservations.find(
+        (reservation) =>
+          reservation.bookId === book._id &&
+          reservation.userId === user._id &&
+          (reservation.status === "READY" || reservation.status === "WAITING"),
+      );
+      if (matchingReservation) {
+        matchingReservation.status = "FULFILLED";
+        matchingReservation.notifiedAt = nowIso();
+        reindexReservationQueue(state.reservations, book._id);
+      }
       state.transactions.unshift(transaction);
-      await writeState(state);
+      const issueAudit = writeAudit(state.auditLogs, req.auth!.userId, "ISSUE_BOOK", "transaction", transaction._id, {
+        bookId: book._id,
+        userId: user._id,
+      });
+      if (shouldUseDirectSupabasePersistence()) {
+        await persistIssueDirect(transaction, book, user, branch, matchingReservation, issueAudit);
+      } else {
+        await writeState(state);
+      }
       return res.status(201).json(transaction);
     } catch (error) {
       return res.status(400).json({ message: error instanceof Error ? error.message : "Unable to issue book" });
@@ -716,13 +1174,16 @@ export function registerRoutes(app: Express) {
 
   app.post("/api/transactions/return", requireAuth, requireRole(["admin", "librarian"]), async (req: AuthenticatedRequest, res) => {
     try {
+      const input = parseBody(returnBookSchema, req.body);
+      if (!input.transactionId && !input.scanCode) {
+        return res.status(400).json({ message: "Provide a transaction id or scan code to process a return" });
+      }
       const state = await readState();
       const transaction = state.transactions.find((candidate) => {
-        if (candidate.status === "RETURNED") return false;
-        if (req.body?.transactionId) return candidate._id === req.body.transactionId;
-        if (req.body?.scanCode) {
+        if (input.transactionId) return candidate._id === input.transactionId;
+        if (input.scanCode) {
           const book = state.books.find((item) => item._id === candidate.bookId);
-          return book?.barcode === req.body.scanCode || book?.isbn === req.body.scanCode;
+          return book?.barcode === input.scanCode || book?.isbn === input.scanCode;
         }
         return false;
       });
@@ -730,28 +1191,51 @@ export function registerRoutes(app: Express) {
       if (!transaction) {
         return res.status(404).json({ message: "Active transaction not found" });
       }
+      if (transaction.status === "RETURNED") {
+        return res.json(transaction);
+      }
 
       const book = state.books.find((candidate) => candidate._id === transaction.bookId);
       if (!book) {
         return res.status(404).json({ message: "Book not found" });
       }
+      const actorExists = state.users.some((candidate) => candidate._id === req.auth!.userId);
 
       transaction.returnedAt = nowIso();
-      transaction.returnedTo = req.auth!.userId;
+      transaction.returnedTo = actorExists ? req.auth!.userId : undefined;
       transaction.fineAmount = computeFine(transaction.dueDate);
       transaction.status = "RETURNED";
       book.availableCopies += 1;
+      normalizeBookCopies(book);
+      const returnAudit = writeAudit(state.auditLogs, req.auth!.userId, "RETURN_BOOK", "transaction", transaction._id, {
+        bookId: transaction.bookId,
+        userId: transaction.userId,
+        fineAmount: transaction.fineAmount,
+      });
+      const createdNotifications: Notification[] = [];
+      createdNotifications.push(
+        notify(state.notifications, transaction.userId, "Book Returned", `${book.title} has been returned successfully.`),
+      );
 
       const nextReservation = state.reservations
         .filter((reservation) => reservation.bookId === book._id && reservation.status === "WAITING")
         .sort((a, b) => a.position - b.position)[0];
 
       if (nextReservation) {
-        nextReservation.status = "READY";
-        nextReservation.notifiedAt = nowIso();
+        const queuedUser = state.users.find((candidate) => candidate._id === nextReservation.userId);
+        createdNotifications.push(...notifyStaff(
+          state,
+          "Reservation Needs Review",
+          `${book.title} was returned and ${queuedUser?.name || "a student"} has a pending request waiting for approval.`,
+        ));
       }
 
-      await writeState(state);
+      if (shouldUseDirectSupabasePersistence()) {
+        const borrower = state.users.find((candidate) => candidate._id === transaction.userId);
+        await persistReturnDirect(transaction, book, borrower, createdNotifications, returnAudit);
+      } else {
+        await writeState(state);
+      }
       return res.json(transaction);
     } catch (error) {
       return res.status(400).json({ message: error instanceof Error ? error.message : "Unable to return book" });
@@ -773,6 +1257,22 @@ export function registerRoutes(app: Express) {
     const safeUsers = state.users.map(publicUser);
     const currentUser = currentUserOrThrow(req, safeUsers);
     const bookId = String(req.params.bookId);
+    const book = state.books.find((candidate) => candidate._id === bookId);
+    if (!book) {
+      return res.status(404).json({ message: "Book not found" });
+    }
+
+    const existingReservation = state.reservations.find(
+      (reservation) =>
+        reservation.bookId === bookId &&
+        reservation.userId === currentUser._id &&
+        (reservation.status === "WAITING" || reservation.status === "READY"),
+    );
+
+    if (existingReservation) {
+      return res.status(400).json({ message: "You already have an active reservation request for this book" });
+    }
+
     const activeReservations = state.reservations
       .filter((reservation) => reservation.bookId === bookId && reservation.status === "WAITING")
       .sort((a, b) => a.position - b.position);
@@ -787,20 +1287,131 @@ export function registerRoutes(app: Express) {
     };
 
     state.reservations.unshift(reservation);
+    reindexReservationQueue(state.reservations, bookId);
+    notifyStaff(
+      state,
+      "New Reservation Request",
+      `${currentUser.name} requested ${book.title}. Review and approve or decline the request.`,
+    );
+    notify(
+      state.notifications,
+      currentUser._id,
+      "Reservation Request Sent",
+      `${book.title} has been sent for admin/librarian approval.`,
+    );
+    writeAudit(state.auditLogs, currentUser._id, "CREATE_RESERVATION", "reservation", reservation._id, { bookId });
     await writeState(state);
     return res.status(201).json(reservation);
   });
 
-  app.post("/api/reservations/:id/fulfill", requireAuth, requireRole(["admin", "librarian"]), async (req: AuthenticatedRequest, res) => {
-    const state = await readState();
-    const reservation = state.reservations.find((candidate) => candidate._id === String(req.params.id));
-    if (!reservation) {
-      return res.status(404).json({ message: "Reservation not found" });
+  app.post("/api/reservations/:id/approve", requireAuth, requireRole(["admin", "librarian"]), async (req: AuthenticatedRequest, res) => {
+    try {
+      const state = await readState();
+      const reservation = state.reservations.find((candidate) => candidate._id === String(req.params.id));
+      if (!reservation) {
+        return res.status(404).json({ message: "Reservation not found" });
+      }
+      if (reservation.status === "READY") {
+        return res.json(reservation);
+      }
+      if (reservation.status === "CANCELLED" || reservation.status === "FULFILLED") {
+        return res.status(400).json({ message: `This reservation is already ${reservation.status.toLowerCase()}` });
+      }
+      if (reservation.status !== "WAITING") {
+        return res.status(400).json({ message: "Only waiting reservations can be approved" });
+      }
+
+      const book = state.books.find((candidate) => candidate._id === reservation.bookId);
+      reservation.status = "READY";
+      reservation.notifiedAt = nowIso();
+      reindexReservationQueue(state.reservations, reservation.bookId);
+      const notification = notify(
+        state.notifications,
+        reservation.userId,
+        "Reservation Approved",
+        `${book?.title || "Your reserved book"} has been approved and is ready for pickup.`,
+      );
+      const auditLog = writeAudit(state.auditLogs, req.auth!.userId, "APPROVE_RESERVATION", "reservation", reservation._id, {
+        bookId: reservation.bookId,
+        userId: reservation.userId,
+      });
+      if (shouldUseDirectSupabasePersistence()) {
+        await persistReservationDecisionDirect(
+          reservation,
+          state.reservations.filter((candidate) => candidate.bookId === reservation.bookId && candidate.status === "WAITING"),
+          [notification],
+          auditLog,
+        );
+      } else {
+        await writeState(state);
+      }
+      return res.json(reservation);
+    } catch (error) {
+      return res.status(400).json({ message: error instanceof Error ? error.message : "Unable to approve reservation" });
     }
-    reservation.status = "FULFILLED";
-    writeAudit(state.auditLogs, req.auth!.userId, "FULFILL_RESERVATION", "reservation", reservation._id);
-    await writeState(state);
-    return res.json(reservation);
+  });
+
+  app.post("/api/reservations/:id/decline", requireAuth, requireRole(["admin", "librarian"]), async (req: AuthenticatedRequest, res) => {
+    try {
+      const state = await readState();
+      const reservation = state.reservations.find((candidate) => candidate._id === String(req.params.id));
+      if (!reservation) {
+        return res.status(404).json({ message: "Reservation not found" });
+      }
+      if (reservation.status === "CANCELLED") {
+        return res.json(reservation);
+      }
+      if (reservation.status === "READY" || reservation.status === "FULFILLED") {
+        return res.status(400).json({ message: `This reservation is already ${reservation.status.toLowerCase()}` });
+      }
+      if (reservation.status !== "WAITING") {
+        return res.status(400).json({ message: "Only waiting reservations can be declined" });
+      }
+
+      const book = state.books.find((candidate) => candidate._id === reservation.bookId);
+      reservation.status = "CANCELLED";
+      reindexReservationQueue(state.reservations, reservation.bookId);
+      const notification = notify(
+        state.notifications,
+        reservation.userId,
+        "Reservation Declined",
+        `${book?.title || "Your reservation"} was declined by the library team.`,
+      );
+      const auditLog = writeAudit(state.auditLogs, req.auth!.userId, "DECLINE_RESERVATION", "reservation", reservation._id, {
+        bookId: reservation.bookId,
+        userId: reservation.userId,
+      });
+      if (shouldUseDirectSupabasePersistence()) {
+        await persistReservationDecisionDirect(
+          reservation,
+          state.reservations.filter((candidate) => candidate.bookId === reservation.bookId && candidate.status === "WAITING"),
+          [notification],
+          auditLog,
+        );
+      } else {
+        await writeState(state);
+      }
+      return res.json(reservation);
+    } catch (error) {
+      return res.status(400).json({ message: error instanceof Error ? error.message : "Unable to decline reservation" });
+    }
+  });
+
+  app.post("/api/reservations/:id/fulfill", requireAuth, requireRole(["admin", "librarian"]), async (req: AuthenticatedRequest, res) => {
+    try {
+      const state = await readState();
+      const reservation = state.reservations.find((candidate) => candidate._id === String(req.params.id));
+      if (!reservation) {
+        return res.status(404).json({ message: "Reservation not found" });
+      }
+      reservation.status = "FULFILLED";
+      reindexReservationQueue(state.reservations, reservation.bookId);
+      writeAudit(state.auditLogs, req.auth!.userId, "FULFILL_RESERVATION", "reservation", reservation._id);
+      await writeState(state);
+      return res.json(reservation);
+    } catch (error) {
+      return res.status(400).json({ message: error instanceof Error ? error.message : "Unable to fulfill reservation" });
+    }
   });
 
   app.get("/api/recommendations", requireAuth, async (req: AuthenticatedRequest, res) => {
@@ -819,7 +1430,10 @@ export function registerRoutes(app: Express) {
     try {
       const input = parseBody(createReviewSchema, req.body);
       const state = await readState();
-      const review: Review = {
+      const existingReview = state.reviews.find(
+        (candidate) => candidate.bookId === input.bookId && candidate.userId === req.auth!.userId,
+      );
+      const review: Review = existingReview || {
         _id: makeId("review"),
         bookId: input.bookId,
         userId: req.auth!.userId,
@@ -828,7 +1442,13 @@ export function registerRoutes(app: Express) {
         createdAt: nowIso(),
       };
 
-      state.reviews.unshift(review);
+      review.rating = input.rating;
+      review.comment = input.comment;
+
+      if (!existingReview) {
+        state.reviews.unshift(review);
+      }
+
       const bookReviews = state.reviews.filter((candidate) => candidate.bookId === input.bookId);
       const book = state.books.find((candidate) => candidate._id === input.bookId);
       if (book) {
@@ -838,12 +1458,44 @@ export function registerRoutes(app: Express) {
         );
       }
 
-      writeAudit(state.auditLogs, req.auth!.userId, "CREATE_REVIEW", "review", review._id, { bookId: input.bookId });
+      writeAudit(state.auditLogs, req.auth!.userId, existingReview ? "UPDATE_REVIEW" : "CREATE_REVIEW", "review", review._id, {
+        bookId: input.bookId,
+      });
       await writeState(state);
-      return res.status(201).json(review);
+      return res.status(existingReview ? 200 : 201).json(review);
     } catch (error) {
       return res.status(400).json({ message: error instanceof Error ? error.message : "Unable to save review" });
     }
+  });
+
+  app.delete("/api/reviews/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
+    const state = await readState();
+    const reviewId = String(req.params.id);
+    const review = state.reviews.find((candidate) => candidate._id === reviewId);
+    if (!review) {
+      return res.status(404).json({ message: "Review not found" });
+    }
+
+    const safeUsers = state.users.map(publicUser);
+    const currentUser = currentUserOrThrow(req, safeUsers);
+    const canDelete = review.userId === currentUser._id || currentUser.role === "admin";
+    if (!canDelete) {
+      return res.status(403).json({ message: "You cannot delete this review" });
+    }
+
+    state.reviews = state.reviews.filter((candidate) => candidate._id !== reviewId);
+    const bookReviews = state.reviews.filter((candidate) => candidate.bookId === review.bookId);
+    const book = state.books.find((candidate) => candidate._id === review.bookId);
+    if (book) {
+      book.ratingCount = bookReviews.length;
+      book.ratingAverage = bookReviews.length > 0
+        ? Number((bookReviews.reduce((sum, candidate) => sum + candidate.rating, 0) / bookReviews.length).toFixed(1))
+        : 0;
+    }
+
+    writeAudit(state.auditLogs, req.auth!.userId, "DELETE_REVIEW", "review", reviewId, { bookId: review.bookId });
+    await writeState(state);
+    return res.status(204).send();
   });
 
   app.get("/api/notifications", requireAuth, async (req: AuthenticatedRequest, res) => {

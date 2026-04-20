@@ -43,6 +43,7 @@ type ProfileRow = {
   role: Role;
   branch_id?: string | null;
   phone?: string | null;
+  registration_number?: string | null;
   avatar_url?: string | null;
   created_at?: string | null;
 };
@@ -131,6 +132,10 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 let supabaseClient: SupabaseClient | null = null;
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
 
 function getSupabaseClient() {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) return null;
@@ -244,7 +249,7 @@ function mapProfile(row: ProfileRow, transactions: TransactionRow[]): StoredUser
     branchId: row.branch_id || undefined,
     avatar: row.avatar_url || undefined,
     phone: undefined,
-    registrationNumber: row.phone || undefined,
+    registrationNumber: row.registration_number || row.phone || undefined,
     borrowingHistory: computeBorrowingHistory(row.id, transactions),
     createdAt: toIso(row.created_at),
   };
@@ -314,7 +319,14 @@ async function upsertRows<T extends Record<string, unknown>>(
 }
 
 async function deleteMissingRows(client: SupabaseClient, table: string, ids: string[]) {
-  if (ids.length === 0) return;
+  if (ids.length === 0) {
+    const { error } = await client.from(table).delete().not("id", "is", null);
+    if (error) {
+      throw new Error(`Unable to sync Supabase table "${table}": ${error.message}`);
+    }
+    return;
+  }
+
   const { error } = await client.from(table).delete().not("id", "in", `(${ids.map((id) => `"${id}"`).join(",")})`);
   if (error) {
     throw new Error(`Unable to sync Supabase table "${table}": ${error.message}`);
@@ -353,7 +365,7 @@ function toProfileRow(user: StoredUser): ProfileRow {
     email: user.email,
     role: user.role,
     branch_id: user.branchId || null,
-    phone: user.registrationNumber || user.phone || null,
+    phone: user.phone || user.registrationNumber || null,
     avatar_url: user.avatar || null,
     created_at: user.createdAt,
   };
@@ -437,39 +449,96 @@ function toAuditLogRow(log: AuditLog): AuditLogRow {
     actor_id: log.actorId || null,
     action: log.action,
     entity: log.entity,
-    entity_id: log.entityId || null,
+    entity_id: log.entityId && isUuid(log.entityId) ? log.entityId : null,
     details: log.details,
     created_at: log.createdAt,
   };
 }
 
 async function writeSupabaseState(client: SupabaseClient, state: LibraryState) {
-  await upsertRows(client, "profiles", state.users.map(toProfileRow));
-  await upsertRows(client, "branches", state.branches.map((branch) => ({
+  const normalizedBranches = state.branches.filter((branch) => isUuid(branch._id));
+  const validUserIds = new Set(
+    state.users
+      .filter((user) => isUuid(user._id))
+      .map((user) => user._id),
+  );
+
+  const normalizedBooks = state.books
+    .filter((book) => isUuid(book._id))
+    .map((book) => {
+    const totalCopies = Math.max(0, book.totalCopies);
+    const availableCopies = Math.min(Math.max(0, book.availableCopies), totalCopies);
+    return {
+      ...book,
+      branchIds: book.branchIds.filter((branchId) => isUuid(branchId)),
+      totalCopies,
+      availableCopies,
+    };
+  });
+  const validBookIds = new Set(normalizedBooks.map((book) => book._id));
+  const validBranchIds = new Set(normalizedBranches.map((branch) => branch._id));
+
+  const normalizedTransactions = state.transactions.filter((transaction) =>
+    isUuid(transaction._id) &&
+    validBookIds.has(transaction.bookId) &&
+    validUserIds.has(transaction.userId) &&
+    (!transaction.branchId || validBranchIds.has(transaction.branchId)) &&
+    (!transaction.issuedBy || validUserIds.has(transaction.issuedBy)) &&
+    (!transaction.returnedTo || validUserIds.has(transaction.returnedTo)),
+  );
+
+  const normalizedReservations = state.reservations.filter((reservation) =>
+    isUuid(reservation._id) &&
+    validBookIds.has(reservation.bookId) &&
+    validUserIds.has(reservation.userId),
+  );
+
+  const normalizedReviews = state.reviews.filter((review) =>
+    isUuid(review._id) &&
+    validBookIds.has(review.bookId) &&
+    validUserIds.has(review.userId),
+  );
+
+  const normalizedNotifications = state.notifications.filter((notification) =>
+    isUuid(notification._id) &&
+    validUserIds.has(notification.userId),
+  );
+
+  const normalizedAuditLogs = state.auditLogs.filter((log) =>
+    isUuid(log._id) &&
+    (!log.actorId || validUserIds.has(log.actorId)),
+  );
+
+  // `profiles.id` must reference a real `auth.users.id` UUID in Supabase.
+  // Local seed users like `user_admin` are valid for file storage but will fail
+  // against Supabase foreign keys, so skip them during Supabase sync.
+  await upsertRows(
+    client,
+    "profiles",
+    state.users
+      .filter((user) => isUuid(user._id))
+      .map(toProfileRow),
+  );
+  await upsertRows(client, "branches", normalizedBranches.map((branch) => ({
     id: branch._id,
     name: branch.name,
     code: branch.code,
     address: branch.address,
   })));
-  await upsertRows(client, "books", state.books.map(toBookRow));
-  await replaceBookBranches(client, state.books);
-  // Validate book availability before upserting transactions
-  const validTransactions = state.transactions.filter((transaction) => {
-    const book = state.books.find((b) => b._id === transaction.bookId);
-    if (!book || book.availableCopies <= 0) {
-      console.warn(`Skipping transaction for book ID ${transaction.bookId}: No copies available.`);
-      return false;
-    }
-    return true;
-  });
+  await upsertRows(client, "books", normalizedBooks.map(toBookRow));
+  await replaceBookBranches(client, normalizedBooks);
+  await upsertRows(client, "transactions", normalizedTransactions.map(toTransactionRow));
+  await upsertRows(client, "reservations", normalizedReservations.map(toReservationRow));
+  await upsertRows(client, "reviews", normalizedReviews.map(toReviewRow));
+  await upsertRows(client, "notifications", normalizedNotifications.map(toNotificationRow));
+  await upsertRows(client, "audit_logs", normalizedAuditLogs.map(toAuditLogRow));
 
-  await upsertRows(client, "transactions", validTransactions.map(toTransactionRow));
-  await upsertRows(client, "reservations", state.reservations.map(toReservationRow));
-  await upsertRows(client, "reviews", state.reviews.map(toReviewRow));
-  await upsertRows(client, "notifications", state.notifications.map(toNotificationRow));
-  await upsertRows(client, "audit_logs", state.auditLogs.map(toAuditLogRow));
-
-  await deleteMissingRows(client, "books", state.books.map((book) => book._id));
+  await deleteMissingRows(client, "transactions", normalizedTransactions.map((transaction) => transaction._id));
+  await deleteMissingRows(client, "reservations", normalizedReservations.map((reservation) => reservation._id));
+  await deleteMissingRows(client, "reviews", normalizedReviews.map((review) => review._id));
+  await deleteMissingRows(client, "notifications", normalizedNotifications.map((notification) => notification._id));
+  await deleteMissingRows(client, "audit_logs", normalizedAuditLogs.map((log) => log._id));
+  await deleteMissingRows(client, "books", normalizedBooks.map((book) => book._id));
 }
 
 export async function readState(): Promise<LibraryState> {

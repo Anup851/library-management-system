@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, Route, Switch, useLocation } from "wouter";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Bell } from "lucide-react";
+import { Bell, ChevronLeft, ChevronRight } from "lucide-react";
 import { queryClient } from "./lib/queryClient";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
@@ -185,34 +185,70 @@ function AuthCallbackScreen() {
     const completeGoogleAuth = async () => {
       const searchParams = new URLSearchParams(window.location.search);
       const code = searchParams.get("code");
+      const queryError = searchParams.get("error_description") || searchParams.get("error");
       const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
       const accessTokenFromHash = hashParams.get("access_token");
       const refreshTokenFromHash = hashParams.get("refresh_token");
+      const hashError = hashParams.get("error_description") || hashParams.get("error");
       const registrationNumber = sessionStorage.getItem("google-auth-registration-number") || undefined;
 
       let accessToken = "";
 
+      if (queryError || hashError) {
+        setStatus(queryError || hashError || "Unable to complete Google sign-in.");
+        return;
+      }
+
       if (code) {
         const { data, error } = await supabaseBrowser.auth.exchangeCodeForSession(code);
-        if (error || !data.session?.access_token) {
-          setStatus(error?.message || "Unable to complete Google sign-in.");
-          return;
+        if (data.session?.access_token) {
+          accessToken = data.session.access_token;
+        } else {
+          const { data: sessionData } = await supabaseBrowser.auth.getSession();
+          if (sessionData.session?.access_token) {
+            accessToken = sessionData.session.access_token;
+          } else {
+            setStatus(error?.message || "Unable to complete Google sign-in.");
+            return;
+          }
         }
-        accessToken = data.session.access_token;
       } else if (accessTokenFromHash && refreshTokenFromHash) {
         const { data, error } = await supabaseBrowser.auth.setSession({
           access_token: accessTokenFromHash,
           refresh_token: refreshTokenFromHash,
         });
-        if (error || !data.session?.access_token) {
-          setStatus(error?.message || "Unable to complete Google sign-in.");
-          return;
+        if (data.session?.access_token) {
+          accessToken = data.session.access_token;
+        } else {
+          const { data: sessionData } = await supabaseBrowser.auth.getSession();
+          if (sessionData.session?.access_token) {
+            accessToken = sessionData.session.access_token;
+          } else {
+            setStatus(error?.message || "Unable to complete Google sign-in.");
+            return;
+          }
         }
-        accessToken = data.session.access_token;
       } else if (accessTokenFromHash) {
         accessToken = accessTokenFromHash;
       } else {
-        setStatus("Google sign-in did not return a usable session.");
+        const { data: sessionData } = await supabaseBrowser.auth.getSession();
+        if (sessionData.session?.access_token) {
+          accessToken = sessionData.session.access_token;
+        } else {
+          setStatus("Google did not return a usable session.");
+          return;
+        }
+      }
+
+      if (!accessToken) {
+        const { data: sessionData } = await supabaseBrowser.auth.getSession();
+        if (sessionData.session?.access_token) {
+          accessToken = sessionData.session.access_token;
+        }
+      }
+
+      if (!accessToken) {
+        setStatus("Google did not return a usable session.");
         return;
       }
 
@@ -251,7 +287,7 @@ function AuthCallbackScreen() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-white">
       <div className="w-full max-w-lg rounded-[2rem] border border-white/10 bg-white/5 p-8 text-center shadow-2xl">
-        <p className="text-xs uppercase tracking-[0.3em] text-cyan-300">LibraryHub</p>
+        <p className="text-xs uppercase tracking-[0.3em] text-cyan-300">Lib Connect</p>
         <h1 className="mt-4 text-3xl font-semibold">Google authentication</h1>
         <p className="mt-3 text-sm text-slate-300">{status}</p>
       </div>
@@ -407,6 +443,7 @@ function Dashboard({ data }: { data: any }) {
   if (isStudent) {
     return (
       <div className="space-y-6">
+        <DashboardHeroSlider />
         <div className={`rounded-[1.75rem] border p-5 sm:p-6 ${
           isTopReader
             ? "border-amber-300/70 bg-amber-50/90 dark:border-amber-400/30 dark:bg-amber-500/10"
@@ -501,6 +538,7 @@ function Dashboard({ data }: { data: any }) {
 
   return (
     <div className="space-y-6">
+      <DashboardHeroSlider />
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
         {[
           ["Books", data.dashboard.totals.books],
@@ -558,6 +596,81 @@ function Dashboard({ data }: { data: any }) {
         </Card>
       </div>
     </div>
+  );
+}
+
+function DashboardHeroSlider() {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const slides = [
+    {
+      image: "https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=1400&q=80",
+      tone: "from-cyan-500/30 via-sky-500/15 to-blue-950/80",
+    },
+    {
+      image: "https://images.unsplash.com/photo-1521587760476-6c12a4b040da?auto=format&fit=crop&w=1400&q=80",
+      tone: "from-indigo-500/30 via-blue-500/10 to-slate-950/80",
+    },
+    {
+      image: "https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=1400&q=80",
+      tone: "from-amber-400/30 via-orange-400/10 to-slate-950/80",
+    },
+    {
+      image: "https://images.unsplash.com/photo-1481627834876-b7833e8f5570?auto=format&fit=crop&w=1400&q=80",
+      tone: "from-emerald-400/25 via-teal-500/10 to-slate-950/80",
+    },
+  ];
+
+  useEffect(() => {
+    if (slides.length <= 1) return;
+
+    const intervalId = window.setInterval(() => {
+      setActiveIndex((current) => (current + 1) % slides.length);
+    }, 10000);
+
+    return () => window.clearInterval(intervalId);
+  }, [slides.length]);
+
+  const slide = slides[activeIndex];
+
+  return (
+    <section className="relative overflow-hidden rounded-[2rem] border border-slate-200/80 bg-slate-950 text-white shadow-[0_25px_70px_-35px_rgba(15,23,42,0.75)] dark:border-white/10">
+      <div className={`absolute inset-0 bg-gradient-to-br ${slide.tone}`} />
+      <div className="relative p-4 sm:p-5 lg:p-6">
+        <div className="relative overflow-hidden rounded-[1.75rem] shadow-2xl shadow-slate-950/30">
+          <img src={slide.image} alt={`Library slide ${activeIndex + 1}`} className="h-[260px] w-full object-cover sm:h-[340px] lg:h-[420px]" />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/18 via-transparent to-transparent" />
+          <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">
+            <button
+              type="button"
+              aria-label="Previous slide"
+              onClick={() => setActiveIndex((current) => (current - 1 + slides.length) % slides.length)}
+              className="flex h-11 w-11 items-center justify-center rounded-2xl text-white/90 transition hover:text-white"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <div className="flex items-center justify-center gap-2">
+              {slides.map((item, index) => (
+                <button
+                  key={item.image}
+                  type="button"
+                  aria-label={`Go to slide ${index + 1}`}
+                  onClick={() => setActiveIndex(index)}
+                  className={`h-2.5 rounded-full transition-all ${index === activeIndex ? "w-8 bg-white" : "w-2.5 bg-white/55 hover:bg-white/80"}`}
+                />
+              ))}
+            </div>
+            <button
+              type="button"
+              aria-label="Next slide"
+              onClick={() => setActiveIndex((current) => (current + 1) % slides.length)}
+              className="flex h-11 w-11 items-center justify-center rounded-2xl text-white/90 transition hover:text-white"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -652,6 +765,10 @@ function Circulation({ data, actions }: { data: any; actions: any }) {
     dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
   });
   const [scanCode, setScanCode] = useState("");
+  const [selectedMemberId, setSelectedMemberId] = useState(data.users.find((user: any) => user.role === "student")?._id || "");
+  const activeLoans = data.transactions.filter((transaction: any) => transaction.status !== "RETURNED");
+  const memberLoans = activeLoans.filter((transaction: any) => transaction.userId === selectedMemberId);
+  const reservationRequests = data.reservations.filter((reservation: any) => reservation.status === "WAITING");
 
   return (
     <div className="space-y-6">
@@ -673,15 +790,98 @@ function Circulation({ data, actions }: { data: any; actions: any }) {
             </Button>
           </div>
         </Card>
-        <Card title="Return Book" text="Paste or scan barcode / ISBN to process returns and fines.">
+        <Card title="Return Book" text="Return by barcode or directly from a member's active borrowed books.">
           <div className="grid gap-4">
             <Input value={scanCode} onChange={(e) => setScanCode(e.target.value)} placeholder="Barcode or ISBN" />
             <Button disabled={actions.returnBook.isPending || !scanCode} onClick={() => actions.returnBook.mutate({ scanCode })}>
               {actions.returnBook.isPending ? "Processing..." : "Process return"}
             </Button>
+            <div className="rounded-[1.25rem] border border-slate-200/80 bg-slate-50/80 p-4 dark:border-white/10 dark:bg-slate-950/30">
+              <p className="text-xs uppercase tracking-[0.3em] text-cyan-600 dark:text-cyan-300">Return from member list</p>
+              <select
+                value={selectedMemberId}
+                onChange={(e) => setSelectedMemberId(e.target.value)}
+                className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-slate-950"
+              >
+                {data.users.filter((user: any) => user.role === "student").map((user: any) => (
+                  <option key={user._id} value={user._id}>{user.name}</option>
+                ))}
+              </select>
+              <div className="mt-4 max-h-[16rem] space-y-3 overflow-y-auto pr-1">
+                {memberLoans.length > 0 ? memberLoans.map((transaction: any) => {
+                  const book = data.books.find((candidate: any) => candidate._id === transaction.bookId);
+                  return (
+                    <div key={transaction._id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white/90 p-3 dark:border-white/10 dark:bg-white/5">
+                      <div>
+                        <p className="font-medium">{book?.title || "Unknown title"}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Due {new Date(transaction.dueDate).toLocaleDateString()} | {transaction.status}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        className="rounded-xl"
+                        disabled={actions.returnBook.isPending}
+                        onClick={() => actions.returnBook.mutate({ transactionId: transaction._id })}
+                      >
+                        Return
+                      </Button>
+                    </div>
+                  );
+                }) : (
+                  <div className="rounded-2xl border border-dashed border-slate-300/80 p-4 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
+                    No active borrowed books for this member.
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </Card>
       </div>
+      <Card title="Reservation Requests" text="Approve or decline student requests with live updates for staff and members.">
+        <div className="max-h-[24rem] space-y-3 overflow-y-auto pr-1 sm:max-h-[28rem]">
+          {reservationRequests.length > 0 ? reservationRequests.map((reservation: any) => {
+            const book = data.books.find((candidate: any) => candidate._id === reservation.bookId);
+            const user = data.users.find((candidate: any) => candidate._id === reservation.userId);
+            return (
+              <div key={reservation._id} className="rounded-[1.5rem] border border-slate-200/80 bg-white/80 p-4 dark:border-white/10 dark:bg-white/5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.3em] text-cyan-600 dark:text-cyan-300">Reservation request</p>
+                    <h3 className="mt-2 text-lg font-semibold">{book?.title || "Unknown title"}</h3>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                      {user?.name || "Unknown member"} | Queue position {reservation.position}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      className="rounded-xl"
+                      disabled={actions.approveReservation.isPending || actions.declineReservation.isPending}
+                      onClick={() => actions.approveReservation.mutate(reservation._id)}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="rounded-xl"
+                      disabled={actions.approveReservation.isPending || actions.declineReservation.isPending}
+                      onClick={() => actions.declineReservation.mutate(reservation._id)}
+                    >
+                      Decline
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            );
+          }) : (
+            <div className="rounded-[1.5rem] border border-dashed border-slate-300/80 p-5 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
+              No pending reservation requests right now.
+            </div>
+          )}
+        </div>
+      </Card>
       <Card title="Transaction Ledger" text="Track issues, returns, overdue items, and fines.">
         <div className="max-h-[24rem] overflow-auto sm:max-h-[30rem]">
           <table className="min-w-full text-sm">
@@ -754,10 +954,25 @@ function Recommendations({ data, actions }: { data: any; actions: any }) {
           <div className="max-h-[22rem] space-y-3 overflow-y-auto pr-1 sm:max-h-[28rem]">
             {data.reviews.map((review: any) => {
               const book = data.books.find((candidate: any) => candidate._id === review.bookId);
+              const canDeleteReview = data.user?.role === "admin" || review.userId === data.user?._id;
               return (
                 <div key={review._id} className="rounded-xl bg-slate-100/80 p-3 dark:bg-white/5 sm:rounded-2xl sm:p-4">
-                  <p className="font-medium">{book?.title}</p>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 sm:text-sm">{review.rating}/5</p>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium">{book?.title}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 sm:text-sm">{review.rating}/5</p>
+                    </div>
+                    {canDeleteReview ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={actions.deleteReview.isPending}
+                        onClick={() => actions.deleteReview.mutate(review._id)}
+                      >
+                        {actions.deleteReview.isPending ? "Deleting..." : "Delete"}
+                      </Button>
+                    ) : null}
+                  </div>
                   <p className="mt-2 text-xs text-slate-600 dark:text-slate-300 sm:text-sm">{review.comment}</p>
                 </div>
               );
@@ -782,7 +997,7 @@ function Assistant({ data, actions }: { data: any; actions: any }) {
       id: "assistant-welcome",
       role: "assistant",
       content:
-        "Hi, I can help you check book availability, digital copies, reservations, due dates, and recommendations. Ask me something like 'Is Clean Code available?' or 'Show my overdue books'.",
+        "Hi, how can I help you? I can manage availability, borrowed books, due dates, reservations, digital titles, and recommendations.",
     },
   ]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -826,8 +1041,17 @@ function Assistant({ data, actions }: { data: any; actions: any }) {
   };
 
   return (
-    <Card title="Library Assistant" text="Chat naturally about books, availability, recommendations, dues, reservations, and digital access.">
-      <div className="grid gap-4 sm:gap-5">
+    <section className="space-y-5">
+      <div className="overflow-hidden rounded-[2rem] border border-slate-200/80 bg-[linear-gradient(135deg,rgba(14,165,233,0.12),rgba(255,255,255,0.92),rgba(16,185,129,0.08))] p-5 shadow-sm dark:border-white/10 dark:bg-[linear-gradient(135deg,rgba(8,145,178,0.2),rgba(15,23,42,0.92),rgba(16,185,129,0.12))] sm:p-6">
+        <p className="text-xs uppercase tracking-[0.32em] text-cyan-600 dark:text-cyan-300">AI Assistant</p>
+        <h2 className="mt-3 text-3xl font-semibold sm:text-4xl">Ask with AI</h2>
+        <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600 dark:text-slate-300 sm:text-base">
+          Get faster answers for library tasks, personal loans, reservations, digital access, and smart reading suggestions.
+        </p>
+      </div>
+
+      <Card title="Conversation" text="Ask naturally and the assistant will answer using your live library data.">
+        <div className="grid gap-4 sm:gap-5">
         <div className="flex flex-wrap gap-2">
           {quickPrompts.map((prompt) => (
             <button
@@ -857,7 +1081,7 @@ function Assistant({ data, actions }: { data: any; actions: any }) {
                     : "border border-slate-200/80 bg-white text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
                 }`}
               >
-                {entry.content}
+                <div className="whitespace-pre-line">{entry.content}</div>
               </div>
             </div>
           ))}
@@ -875,7 +1099,7 @@ function Assistant({ data, actions }: { data: any; actions: any }) {
             <Textarea
               rows={3}
               value={message}
-              placeholder="Ask about availability, reservations, overdue fines, digital copies, or recommendations..."
+              placeholder="Ask with AI"
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
@@ -886,7 +1110,7 @@ function Assistant({ data, actions }: { data: any; actions: any }) {
             />
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Press Enter to send, Shift+Enter for a new line.
+                Press Enter to send.
               </p>
               <Button className="rounded-2xl" disabled={actions.askAssistant.isPending || !message.trim()} onClick={() => sendMessage(message)}>
                 {actions.askAssistant.isPending ? "Sending..." : "Send"}
@@ -894,8 +1118,9 @@ function Assistant({ data, actions }: { data: any; actions: any }) {
             </div>
           </div>
         </div>
-      </div>
-    </Card>
+        </div>
+      </Card>
+    </section>
   );
 }
 
@@ -1056,6 +1281,17 @@ function Workspace() {
   if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-slate-950 text-white">Loading...</div>;
   if (!user) return <LoginScreen />;
   if (isStudent && !user.registrationNumber) return <RegistrationNumberPrompt />;
+  if (bootstrap.error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-white">
+        <div className="max-w-xl rounded-2xl border border-red-400/30 bg-slate-900/80 p-6 shadow-2xl">
+          <p className="text-xs uppercase tracking-[0.3em] text-red-300">Bootstrap Error</p>
+          <h1 className="mt-3 text-2xl font-semibold">Library data could not be loaded</h1>
+          <p className="mt-3 text-sm text-slate-300">{bootstrap.error.message}</p>
+        </div>
+      </div>
+    );
+  }
   if (bootstrap.isLoading || !bootstrap.data) return <div className="flex min-h-screen items-center justify-center bg-slate-950 text-white">Loading library data...</div>;
 
   const data = bootstrap.data;
@@ -1071,53 +1307,55 @@ function Workspace() {
 
   return (
     <div className="min-h-screen bg-[linear-gradient(135deg,#f8fafc,#eef2ff,#ecfeff)] text-slate-950 dark:bg-[linear-gradient(135deg,#020617,#0f172a,#111827)] dark:text-white">
-      <div className="flex min-h-screen">
-        <Sidebar theme={theme} onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")} />
-        <main className="min-w-0 flex-1 p-3 sm:p-4 md:p-8">
-          <div className="mx-auto max-w-7xl">
-            <MobileSidebar theme={theme} onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")} />
-            <div className="mb-4 flex flex-col gap-3 md:mb-6 md:flex-row md:items-end md:justify-between md:gap-4">
+      <main className="min-h-screen p-3 sm:p-4 md:p-8">
+        <div className="mx-auto max-w-7xl">
+          <MobileSidebar theme={theme} onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")} />
+          <div className="mb-4 flex flex-col gap-3 md:mb-6 md:flex-row md:items-end md:justify-between md:gap-4">
+            <div className="flex items-start gap-3">
+              <div className="hidden md:block">
+                <Sidebar theme={theme} onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")} />
+              </div>
               <div>
-                <p className="text-[11px] uppercase tracking-[0.28em] text-cyan-600 dark:text-cyan-300 sm:text-sm sm:tracking-[0.35em]">LibraryHub</p>
-                <h1 className="mt-1.5 text-2xl font-semibold tracking-tight sm:mt-2 sm:text-4xl">Library Management System</h1>
+                <p className="text-[11px] uppercase tracking-[0.28em] text-cyan-600 dark:text-cyan-300 sm:text-sm sm:tracking-[0.35em]">Lib Connect</p>
+                <h1 className="mt-1.5 text-2xl font-semibold tracking-tight sm:mt-2 sm:text-4xl">Lib Connect Portal</h1>
                 <p className="mt-1.5 max-w-3xl text-sm text-slate-600 dark:text-slate-300 sm:mt-2 sm:text-base">
-                  A modern full-stack workspace for books, users, fines, reservations, reviews, analytics, and digital reading.
+                  A modern full-stack workspace for books, students, circulation, reservations, and digital reading.
                 </p>
               </div>
-              <div className="flex w-full items-center justify-between gap-3 md:w-auto md:justify-end">
-                <div className="hidden md:block">
-                  <NotificationBell data={data} />
-                </div>
-                <select value={location} onChange={(e) => setLocation(e.target.value)} className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 md:hidden dark:border-white/10 dark:bg-slate-950">
-                  {nav.map((item) => <option key={item.href} value={item.href}>{item.label}</option>)}
-                </select>
-                <div className="ml-auto md:hidden">
-                  <NotificationBell data={data} />
-                </div>
+            </div>
+            <div className="flex w-full items-center justify-between gap-3 md:w-auto md:justify-end">
+              <div className="hidden md:block">
+                <NotificationBell data={data} />
+              </div>
+              <select value={location} onChange={(e) => setLocation(e.target.value)} className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 md:hidden dark:border-white/10 dark:bg-slate-950">
+                {nav.map((item) => <option key={item.href} value={item.href}>{item.label}</option>)}
+              </select>
+              <div className="ml-auto md:hidden">
+                <NotificationBell data={data} />
               </div>
             </div>
-
-            <Switch>
-              <Route path="/"><Dashboard data={data} /></Route>
-              <Route path="/catalog"><Catalog data={data} canWrite={canWrite} actions={actions} /></Route>
-              {isAdmin || isLibrarian ? <Route path="/circulation"><Circulation data={data} actions={actions} /></Route> : null}
-              <Route path="/recommendations"><Recommendations data={data} actions={actions} /></Route>
-              <Route path="/assistant"><Assistant data={data} actions={actions} /></Route>
-              {isAdmin ? <Route path="/members"><Members data={data} actions={actions} /></Route> : null}
-              {isAdmin ? <Route path="/admin"><Admin data={data} actions={actions} /></Route> : null}
-              <Route>
-                <div className="rounded-[2rem] border border-slate-200/80 bg-white/80 p-8 dark:border-white/10 dark:bg-white/5">
-                  <p className="text-lg font-semibold">{isStudent ? "This section is only available to admin and librarian users." : "Page not found."}</p>
-                  <div className="mt-4 flex gap-4">
-                    <Link href="/">Dashboard</Link>
-                    <Link href="/catalog">Catalog</Link>
-                  </div>
-                </div>
-              </Route>
-            </Switch>
           </div>
-        </main>
-      </div>
+
+          <Switch>
+            <Route path="/"><Dashboard data={data} /></Route>
+            <Route path="/catalog"><Catalog data={data} canWrite={canWrite} actions={actions} /></Route>
+            {isAdmin || isLibrarian ? <Route path="/circulation"><Circulation data={data} actions={actions} /></Route> : null}
+            <Route path="/recommendations"><Recommendations data={data} actions={actions} /></Route>
+            <Route path="/assistant"><Assistant data={data} actions={actions} /></Route>
+            {isAdmin ? <Route path="/members"><Members data={data} actions={actions} /></Route> : null}
+            {isAdmin ? <Route path="/admin"><Admin data={data} actions={actions} /></Route> : null}
+            <Route>
+              <div className="rounded-[2rem] border border-slate-200/80 bg-white/80 p-8 dark:border-white/10 dark:bg-white/5">
+                <p className="text-lg font-semibold">{isStudent ? "This section is only available to admin and librarian users." : "Page not found."}</p>
+                <div className="mt-4 flex gap-4">
+                  <Link href="/">Dashboard</Link>
+                  <Link href="/catalog">Catalog</Link>
+                </div>
+              </div>
+            </Route>
+          </Switch>
+        </div>
+      </main>
     </div>
   );
 }

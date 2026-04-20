@@ -101,12 +101,13 @@ function SidebarShell({
   return (
     <>
       <div className="mb-8 flex items-center gap-3">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 via-blue-500 to-indigo-600 shadow-lg shadow-cyan-950/40">
-          <BookOpen className="h-6 w-6" />
+        <div className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl bg-[linear-gradient(135deg,#22d3ee_0%,#2563eb_55%,#0f172a_100%)] shadow-lg shadow-cyan-950/40">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.35),transparent_45%)]" />
+          <BookOpen className="relative h-6 w-6" />
         </div>
         <div>
-          <p className="text-lg font-semibold tracking-tight">LibraryHub</p>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Modern Library Management</p>
+          <p className="text-lg font-semibold tracking-tight">Lib Connect</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Portal Navigation</p>
         </div>
       </div>
 
@@ -167,9 +168,30 @@ export function MobileSidebar({ theme, onToggleTheme }: SidebarProps) {
 }
 
 export function Sidebar({ theme, onToggleTheme }: SidebarProps) {
+  const [open, setOpen] = useState(false);
+
   return (
-    <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-slate-200/80 bg-white/85 px-4 py-6 text-slate-900 backdrop-blur dark:border-white/10 dark:bg-slate-950/90 dark:text-slate-100 md:flex">
-      <SidebarShell theme={theme} onToggleTheme={onToggleTheme} />
-    </aside>
+    <div className="hidden md:block">
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetTrigger asChild>
+          <button
+            type="button"
+            aria-label="Open menu"
+            className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200/80 bg-white/90 text-slate-900 shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-100 dark:border-white/10 dark:bg-slate-950/90 dark:text-white dark:hover:bg-slate-900"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+        </SheetTrigger>
+        <SheetContent side="left" className="w-[24rem] max-w-[92vw] border-r border-slate-200/80 bg-white/88 p-6 text-slate-900 backdrop-blur dark:border-white/10 dark:bg-slate-950/92 dark:text-slate-100">
+          <SheetHeader className="sr-only">
+            <SheetTitle>Menu</SheetTitle>
+            <SheetDescription>Open app sections</SheetDescription>
+          </SheetHeader>
+          <div className="flex h-full flex-col">
+            <SidebarShell theme={theme} onToggleTheme={onToggleTheme} onNavigate={() => setOpen(false)} />
+          </div>
+        </SheetContent>
+      </Sheet>
+    </div>
   );
 }
