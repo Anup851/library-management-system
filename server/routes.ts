@@ -30,7 +30,15 @@ const registerSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(6),
+  registrationNumber: z.string().min(1, "Registration number is required"),
   role: z.enum(["student"]).default("student"),
+});
+const googleAuthSchema = z.object({
+  accessToken: z.string().min(1),
+  registrationNumber: z.string().trim().min(1).optional(),
+});
+const registrationNumberSchema = z.object({
+  registrationNumber: z.string().trim().min(1, "Registration number is required"),
 });
 
 let authClient: SupabaseClient | null = null;
@@ -80,6 +88,21 @@ function getDashboardData(books: Book[], users: User[], transactions: Transactio
     activeUsers.set(transaction.userId, (activeUsers.get(transaction.userId) || 0) + 1);
   }
 
+  const topReaderReward = [...activeUsers.entries()]
+    .map(([userId, borrowCount]) => {
+      const user = users.find((candidate) => candidate._id === userId && candidate.role === "student");
+      if (!user) return null;
+      return {
+        userId,
+        name: user.name,
+        registrationNumber: user.registrationNumber,
+        borrowCount,
+        rewardTitle: "Top Reader Award",
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b!.borrowCount - a!.borrowCount)[0] || null;
+
   return {
     totals: {
       books: books.length,
@@ -106,6 +129,7 @@ function getDashboardData(books: Book[], users: User[], transactions: Transactio
       }))
       .sort((a, b) => b.borrowCount - a.borrowCount)
       .slice(0, 5),
+    topReaderReward,
     overdueItems,
   };
 }
@@ -332,6 +356,51 @@ function getSupabaseAuthClient() {
   return authClient;
 }
 
+async function upsertStudentProfile(
+  client: SupabaseClient,
+  input: {
+    id: string;
+    email: string;
+    fullName: string;
+    registrationNumber?: string;
+  },
+) {
+  const { data: existingProfile } = await client
+    .from("profiles")
+    .select("role, phone")
+    .eq("id", input.id)
+    .maybeSingle();
+
+  const { error } = await client.from("profiles").upsert(
+    {
+      id: input.id,
+      email: input.email,
+      full_name: input.fullName,
+      role: existingProfile?.role || "student",
+      phone: input.registrationNumber || existingProfile?.phone || null,
+    },
+    { onConflict: "id" },
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+async function buildAuthPayload(userId: string) {
+  const state = await readState();
+  const user = state.users.find((candidate) => candidate._id === userId);
+  if (!user) {
+    throw new Error("Profile not found for this account");
+  }
+
+  const safeUser = publicUser(user);
+  return {
+    token: signToken(safeUser),
+    user: safeUser,
+  };
+}
+
 export function registerRoutes(app: Express) {
   app.post("/api/auth/login", async (req, res) => {
     try {
@@ -383,6 +452,7 @@ export function registerRoutes(app: Express) {
         .update({
           full_name: input.name,
           role: "student",
+          phone: input.registrationNumber,
         })
         .eq("id", data.user.id);
 
@@ -403,6 +473,56 @@ export function registerRoutes(app: Express) {
       });
     } catch (error) {
       return res.status(400).json({ message: error instanceof Error ? error.message : "Unable to register" });
+    }
+  });
+
+  app.post("/api/auth/google", async (req, res) => {
+    try {
+      const input = parseBody(googleAuthSchema, req.body);
+      const client = getSupabaseAuthClient();
+      const { data, error } = await client.auth.getUser(input.accessToken);
+
+      if (error || !data.user?.email) {
+        return res.status(401).json({ message: "Unable to verify Google sign-in" });
+      }
+
+      const fullName =
+        data.user.user_metadata?.full_name ||
+        data.user.user_metadata?.name ||
+        data.user.email;
+
+      await upsertStudentProfile(client, {
+        id: data.user.id,
+        email: data.user.email,
+        fullName,
+        registrationNumber: input.registrationNumber,
+      });
+
+      const payload = await buildAuthPayload(data.user.id);
+      return res.json(payload);
+    } catch (error) {
+      return res.status(400).json({ message: error instanceof Error ? error.message : "Unable to sign in with Google" });
+    }
+  });
+
+  app.patch("/api/auth/registration-number", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const input = parseBody(registrationNumberSchema, req.body);
+      const client = getSupabaseAuthClient();
+      const currentState = await readState();
+      const currentUser = currentUserOrThrow(req, currentState.users.map(publicUser));
+
+      await upsertStudentProfile(client, {
+        id: currentUser._id,
+        email: currentUser.email,
+        fullName: currentUser.name,
+        registrationNumber: input.registrationNumber,
+      });
+
+      const payload = await buildAuthPayload(currentUser._id);
+      return res.json(payload);
+    } catch (error) {
+      return res.status(400).json({ message: error instanceof Error ? error.message : "Unable to update registration number" });
     }
   });
 

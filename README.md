@@ -49,6 +49,7 @@ docs/
    `npm install`
 2. Start development server:
    `npm run dev`
+   Open `http://localhost:5000` in your browser.
 3. Build for production:
    `npm run build`
 

@@ -243,7 +243,8 @@ function mapProfile(row: ProfileRow, transactions: TransactionRow[]): StoredUser
     role: row.role,
     branchId: row.branch_id || undefined,
     avatar: row.avatar_url || undefined,
-    phone: row.phone || undefined,
+    phone: undefined,
+    registrationNumber: row.phone || undefined,
     borrowingHistory: computeBorrowingHistory(row.id, transactions),
     createdAt: toIso(row.created_at),
   };
@@ -352,7 +353,7 @@ function toProfileRow(user: StoredUser): ProfileRow {
     email: user.email,
     role: user.role,
     branch_id: user.branchId || null,
-    phone: user.phone || null,
+    phone: user.registrationNumber || user.phone || null,
     avatar_url: user.avatar || null,
     created_at: user.createdAt,
   };

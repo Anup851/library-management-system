@@ -95,8 +95,10 @@ app.use((req, res, next) => {
   }
 
   const port = parseInt(process.env.PORT || "5000", 10);
+  const host = "0.0.0.0";
+  const browserHost = host === "0.0.0.0" ? "localhost" : host;
 
-  httpServer.listen(port, "0.0.0.0", () => {
-    log(`serving on http://0.0.0.0:${port}`);
+  httpServer.listen(port, host, () => {
+    log(`serving on http://${browserHost}:${port}`);
   });
 })();

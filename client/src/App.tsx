@@ -11,13 +11,26 @@ import { useBootstrap, useLibraryActions } from "@/hooks/use-library";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { supabaseBrowser } from "@/lib/supabase-browser";
+
+function GoogleLogo() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 shrink-0">
+      <path fill="#EA4335" d="M12 10.2v3.9h5.4c-.2 1.3-1.5 3.9-5.4 3.9-3.3 0-5.9-2.7-5.9-6s2.6-6 5.9-6c1.9 0 3.1.8 3.9 1.5l2.7-2.6C16.9 3.4 14.7 2.5 12 2.5 6.8 2.5 2.5 6.8 2.5 12S6.8 21.5 12 21.5c6.9 0 9.1-4.8 9.1-7.3 0-.5 0-.9-.1-1.3H12Z" />
+      <path fill="#34A853" d="M2.5 12c0 1.7.4 3.3 1.3 4.6l3.6-2.8c-.2-.5-.4-1.2-.4-1.8s.1-1.2.4-1.8L3.8 7.4A9.4 9.4 0 0 0 2.5 12Z" />
+      <path fill="#FBBC05" d="M12 21.5c2.7 0 4.9-.9 6.5-2.5l-3.1-2.4c-.8.6-1.9 1-3.4 1-2.5 0-4.6-1.7-5.4-4l-3.7 2.9A9.5 9.5 0 0 0 12 21.5Z" />
+      <path fill="#4285F4" d="M21.1 12.9c.1-.4.1-.8.1-1.3s0-.9-.1-1.3H12v3.9h5.4c-.3 1.4-1.1 2.5-2 3.3l3.1 2.4c1.8-1.7 2.6-4.1 2.6-7Z" />
+    </svg>
+  );
+}
 
 function LoginScreen() {
-  const { loginMutation, registerMutation } = useAuth();
+  const { loginMutation, registerMutation, startGoogleAuth } = useAuth();
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [registrationNumber, setRegistrationNumber] = useState("");
   const [selectedRole, setSelectedRole] = useState<"Admin" | "Librarian" | "Student">("Student");
   const presets: Array<{
     role: "Admin" | "Librarian" | "Student";
@@ -113,6 +126,16 @@ function LoginScreen() {
                 >
                   {loginMutation.isPending ? "Signing in..." : "Open workspace"}
                 </Button>
+                <Button
+                  variant="outline"
+                  className="w-full rounded-2xl border-white/15 bg-white/5 text-white hover:bg-white/10"
+                  onClick={() => startGoogleAuth("login")}
+                >
+                  <span className="flex items-center justify-center gap-3">
+                    <GoogleLogo />
+                    Continue with Google
+                  </span>
+                </Button>
               </div>
             </>
           ) : (
@@ -121,19 +144,116 @@ function LoginScreen() {
               <p className="mt-2 text-sm text-slate-300">Self-signup is only for students. Admin and librarian accounts stay controlled by staff.</p>
               <div className="mt-6 space-y-4">
                 <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" className="border-white/10 bg-slate-950/60 text-white" />
+                <Input value={registrationNumber} onChange={(e) => setRegistrationNumber(e.target.value)} placeholder="Registration number" className="border-white/10 bg-slate-950/60 text-white" />
                 <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="border-white/10 bg-slate-950/60 text-white" />
                 <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" className="border-white/10 bg-slate-950/60 text-white" />
                 <Button
                   className="w-full rounded-2xl bg-cyan-400 text-slate-950 hover:bg-cyan-300"
-                  disabled={registerMutation.isPending || !name || !email || !password}
-                  onClick={() => registerMutation.mutate({ name, email, password, role: "student" })}
+                  disabled={registerMutation.isPending || !name || !registrationNumber || !email || !password}
+                  onClick={() => registerMutation.mutate({ name, email, password, registrationNumber, role: "student" })}
                 >
                   {registerMutation.isPending ? "Creating account..." : "Create student account"}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full rounded-2xl border-white/15 bg-white/5 text-white hover:bg-white/10"
+                  disabled={!registrationNumber.trim()}
+                  onClick={() => startGoogleAuth("signup", registrationNumber.trim())}
+                >
+                  <span className="flex items-center justify-center gap-3">
+                    <GoogleLogo />
+                    Sign up with Google
+                  </span>
                 </Button>
               </div>
             </>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function AuthCallbackScreen() {
+  const { googleAuthMutation } = useAuth();
+  const [, setLocation] = useLocation();
+  const [status, setStatus] = useState("Finishing Google sign-in...");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const completeGoogleAuth = async () => {
+      const searchParams = new URLSearchParams(window.location.search);
+      const code = searchParams.get("code");
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      const accessTokenFromHash = hashParams.get("access_token");
+      const refreshTokenFromHash = hashParams.get("refresh_token");
+      const registrationNumber = sessionStorage.getItem("google-auth-registration-number") || undefined;
+
+      let accessToken = "";
+
+      if (code) {
+        const { data, error } = await supabaseBrowser.auth.exchangeCodeForSession(code);
+        if (error || !data.session?.access_token) {
+          setStatus(error?.message || "Unable to complete Google sign-in.");
+          return;
+        }
+        accessToken = data.session.access_token;
+      } else if (accessTokenFromHash && refreshTokenFromHash) {
+        const { data, error } = await supabaseBrowser.auth.setSession({
+          access_token: accessTokenFromHash,
+          refresh_token: refreshTokenFromHash,
+        });
+        if (error || !data.session?.access_token) {
+          setStatus(error?.message || "Unable to complete Google sign-in.");
+          return;
+        }
+        accessToken = data.session.access_token;
+      } else if (accessTokenFromHash) {
+        accessToken = accessTokenFromHash;
+      } else {
+        setStatus("Google sign-in did not return a usable session.");
+        return;
+      }
+
+      window.history.replaceState({}, document.title, "/auth/callback");
+
+      googleAuthMutation.mutate(
+        {
+          accessToken,
+          registrationNumber,
+        },
+        {
+          onSuccess: async () => {
+            sessionStorage.removeItem("google-auth-intent");
+            sessionStorage.removeItem("google-auth-registration-number");
+            await supabaseBrowser.auth.signOut();
+            if (!cancelled) {
+              setLocation("/");
+            }
+          },
+          onError: (mutationError) => {
+            if (!cancelled) {
+              setStatus(mutationError.message);
+            }
+          },
+        },
+      );
+    };
+
+    void completeGoogleAuth();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [googleAuthMutation, setLocation]);
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-white">
+      <div className="w-full max-w-lg rounded-[2rem] border border-white/10 bg-white/5 p-8 text-center shadow-2xl">
+        <p className="text-xs uppercase tracking-[0.3em] text-cyan-300">LibraryHub</p>
+        <h1 className="mt-4 text-3xl font-semibold">Google authentication</h1>
+        <p className="mt-3 text-sm text-slate-300">{status}</p>
       </div>
     </div>
   );
@@ -275,16 +395,34 @@ function NotificationBell({ data }: { data: any }) {
 }
 
 function Dashboard({ data }: { data: any }) {
-  const { isStudent } = useAuth();
+  const { isStudent, user } = useAuth();
   const activeLoans = data.transactions.filter((transaction: any) => transaction.status !== "RETURNED");
   const overdueLoans = activeLoans.filter((transaction: any) => transaction.status === "OVERDUE");
   const nextDueLoan = [...activeLoans].sort(
     (a: any, b: any) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(),
   )[0];
+  const topReader = data.dashboard.topReaderReward;
+  const isTopReader = Boolean(isStudent && user && topReader?.userId === user._id);
 
   if (isStudent) {
     return (
       <div className="space-y-6">
+        <div className={`rounded-[1.75rem] border p-5 sm:p-6 ${
+          isTopReader
+            ? "border-amber-300/70 bg-amber-50/90 dark:border-amber-400/30 dark:bg-amber-500/10"
+            : "border-slate-200/80 bg-white/80 dark:border-white/10 dark:bg-white/5"
+        }`}>
+          <p className="text-xs uppercase tracking-[0.3em] text-cyan-600 dark:text-cyan-300">Student Reward</p>
+          <h2 className="mt-3 text-2xl font-semibold">
+            {isTopReader ? "You earned the Top Reader Award" : topReader ? `${topReader.name} leads this month` : "Reward board is warming up"}
+          </h2>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+            {topReader
+              ? `${topReader.name} has borrowed ${topReader.borrowCount} book${topReader.borrowCount === 1 ? "" : "s"} and currently holds the ${topReader.rewardTitle}.`
+              : "Once students start borrowing books, the most active reader will be highlighted here."}
+          </p>
+        </div>
+
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
           {[
             ["Borrowed Books", activeLoans.length],
@@ -377,6 +515,22 @@ function Dashboard({ data }: { data: any }) {
         ))}
       </div>
       <div className="grid gap-6 xl:grid-cols-2">
+        <Card title="Top Reader Reward" text="Recognize the student who has borrowed the most books.">
+          {topReader ? (
+            <div className="rounded-[1.5rem] border border-amber-300/60 bg-amber-50/90 p-5 dark:border-amber-400/20 dark:bg-amber-500/10">
+              <p className="text-xs uppercase tracking-[0.3em] text-amber-700 dark:text-amber-200">{topReader.rewardTitle}</p>
+              <h3 className="mt-3 text-2xl font-semibold">{topReader.name}</h3>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                Borrowed {topReader.borrowCount} book{topReader.borrowCount === 1 ? "" : "s"}
+                {topReader.registrationNumber ? ` | Reg No. ${topReader.registrationNumber}` : ""}
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-slate-300/80 p-4 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
+              No student reward winner yet.
+            </div>
+          )}
+        </Card>
         <Card title="Most Borrowed" text="Trending books across branches.">
           <div className="max-h-[24rem] space-y-3 overflow-y-auto pr-1">
             {data.dashboard.mostBorrowedBooks.map((item: any) => (
@@ -754,6 +908,7 @@ function Members({ data, actions }: { data: any; actions: any }) {
             <tr>
               <th className="pb-3">Name</th>
               <th className="pb-3">Email</th>
+              <th className="pb-3">Registration No.</th>
               <th className="pb-3">Role</th>
               <th className="pb-3">Branch</th>
               <th className="pb-3">Actions</th>
@@ -764,6 +919,7 @@ function Members({ data, actions }: { data: any; actions: any }) {
               <tr key={user._id} className="border-t border-slate-200/70 dark:border-white/10">
                 <td className="py-3">{user.name}</td>
                 <td className="py-3">{user.email}</td>
+                <td className="py-3">{user.registrationNumber || "Not set"}</td>
                 <td className="py-3 capitalize">{user.role}</td>
                 <td className="py-3">{data.branches.find((branch: any) => branch._id === user.branchId)?.name || "Unassigned"}</td>
                 <td className="py-3">
@@ -787,6 +943,38 @@ function Members({ data, actions }: { data: any; actions: any }) {
         </table>
       </div>
     </Card>
+  );
+}
+
+function RegistrationNumberPrompt() {
+  const { user, updateRegistrationNumberMutation } = useAuth();
+  const [registrationNumber, setRegistrationNumber] = useState(user?.registrationNumber || "");
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-slate-950 px-6 text-white">
+      <div className="w-full max-w-xl rounded-[2rem] border border-white/10 bg-white/5 p-8 shadow-2xl">
+        <p className="text-xs uppercase tracking-[0.3em] text-cyan-300">Student onboarding</p>
+        <h1 className="mt-4 text-3xl font-semibold">Add your registration number</h1>
+        <p className="mt-3 text-sm text-slate-300">
+          We need your student registration number before opening the library workspace.
+        </p>
+        <div className="mt-6 space-y-4">
+          <Input
+            value={registrationNumber}
+            onChange={(event) => setRegistrationNumber(event.target.value)}
+            placeholder="Registration number"
+            className="border-white/10 bg-slate-950/60 text-white"
+          />
+          <Button
+            className="w-full rounded-2xl bg-cyan-400 text-slate-950 hover:bg-cyan-300"
+            disabled={updateRegistrationNumberMutation.isPending || !registrationNumber.trim()}
+            onClick={() => updateRegistrationNumberMutation.mutate({ registrationNumber: registrationNumber.trim() })}
+          >
+            {updateRegistrationNumberMutation.isPending ? "Saving..." : "Continue to dashboard"}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -864,8 +1052,10 @@ function Workspace() {
     if (location === "/auth/login") setLocation("/");
   }, [location, setLocation]);
 
+  if (location === "/auth/callback") return <AuthCallbackScreen />;
   if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-slate-950 text-white">Loading...</div>;
   if (!user) return <LoginScreen />;
+  if (isStudent && !user.registrationNumber) return <RegistrationNumberPrompt />;
   if (bootstrap.isLoading || !bootstrap.data) return <div className="flex min-h-screen items-center justify-center bg-slate-950 text-white">Loading library data...</div>;
 
   const data = bootstrap.data;

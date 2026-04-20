@@ -30,6 +30,7 @@ export const userSchema = z.object({
   branchId: z.string().optional(),
   avatar: z.string().optional(),
   phone: z.string().optional(),
+  registrationNumber: z.string().optional(),
   borrowingHistory: z.array(z.string()).default([]),
   createdAt: z.string(),
 });
@@ -172,6 +173,13 @@ export const dashboardSchema = z.object({
       borrowCount: z.number(),
     }),
   ),
+  topReaderReward: z.object({
+    userId: z.string(),
+    name: z.string(),
+    registrationNumber: z.string().optional(),
+    borrowCount: z.number(),
+    rewardTitle: z.string(),
+  }).nullable(),
   overdueItems: z.array(transactionSchema),
 });
 
