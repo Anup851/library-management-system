@@ -7,6 +7,7 @@ import type {
   Branch,
   Notification,
   Reservation,
+  ReturnRequest,
   Review,
   Role,
   Transaction,
@@ -23,6 +24,7 @@ export type LibraryState = {
   books: Book[];
   transactions: Transaction[];
   reservations: Reservation[];
+  returnRequests: ReturnRequest[];
   reviews: Review[];
   notifications: Notification[];
   auditLogs: AuditLog[];
@@ -105,6 +107,18 @@ type ReviewRow = {
   rating: number | string;
   comment?: string | null;
   created_at?: string | null;
+};
+
+type ReturnRequestRow = {
+  id: string;
+  transaction_id: string;
+  book_id: string;
+  user_id: string;
+  status: "PENDING" | "APPROVED" | "DECLINED";
+  requested_at?: string | null;
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
+  note?: string | null;
 };
 
 type NotificationRow = {
@@ -208,6 +222,20 @@ function mapReview(row: ReviewRow): Review {
   };
 }
 
+function mapReturnRequest(row: ReturnRequestRow): ReturnRequest {
+  return {
+    _id: row.id,
+    transactionId: row.transaction_id,
+    bookId: row.book_id,
+    userId: row.user_id,
+    status: row.status,
+    requestedAt: toIso(row.requested_at),
+    reviewedAt: row.reviewed_at ? toIso(row.reviewed_at) : undefined,
+    reviewedBy: row.reviewed_by || undefined,
+    note: row.note || undefined,
+  };
+}
+
 function mapNotification(row: NotificationRow): Notification {
   return {
     _id: row.id,
@@ -294,7 +322,18 @@ function mapBook(
 async function ensureFileSeed(): Promise<LibraryState> {
   await fs.mkdir(path.dirname(DATA_PATH), { recursive: true });
   const raw = await fs.readFile(DATA_PATH, "utf-8");
-  return JSON.parse(raw) as LibraryState;
+  const parsed = JSON.parse(raw) as Partial<LibraryState>;
+  return {
+    users: parsed.users || [],
+    branches: parsed.branches || [],
+    books: parsed.books || [],
+    transactions: parsed.transactions || [],
+    reservations: parsed.reservations || [],
+    returnRequests: parsed.returnRequests || [],
+    reviews: parsed.reviews || [],
+    notifications: parsed.notifications || [],
+    auditLogs: parsed.auditLogs || [],
+  };
 }
 
 async function selectAll<T>(client: SupabaseClient, table: string) {
@@ -431,6 +470,20 @@ function toReviewRow(review: Review): ReviewRow {
   };
 }
 
+function toReturnRequestRow(request: ReturnRequest): ReturnRequestRow {
+  return {
+    id: request._id,
+    transaction_id: request.transactionId,
+    book_id: request.bookId,
+    user_id: request.userId,
+    status: request.status,
+    requested_at: request.requestedAt,
+    reviewed_at: request.reviewedAt || null,
+    reviewed_by: request.reviewedBy || null,
+    note: request.note || null,
+  };
+}
+
 function toNotificationRow(notification: Notification): NotificationRow {
   return {
     id: notification._id,
@@ -487,15 +540,44 @@ async function writeSupabaseState(client: SupabaseClient, state: LibraryState) {
     (!transaction.returnedTo || validUserIds.has(transaction.returnedTo)),
   );
 
+  const activeLoanCounts = normalizedTransactions.reduce<Map<string, number>>((counts, transaction) => {
+    if (transaction.status === "RETURNED") return counts;
+    counts.set(transaction.bookId, (counts.get(transaction.bookId) || 0) + 1);
+    return counts;
+  }, new Map());
+
+  const reconciledBooks = normalizedBooks.map((book) => {
+    const activeLoans = activeLoanCounts.get(book._id) || 0;
+    const maxAvailableCopies = Math.max(0, book.totalCopies - activeLoans);
+    return {
+      ...book,
+      availableCopies: Math.min(book.availableCopies, maxAvailableCopies),
+    };
+  });
+
+  const reconciledBookIds = new Set(reconciledBooks.map((book) => book._id));
+
   const normalizedReservations = state.reservations.filter((reservation) =>
     isUuid(reservation._id) &&
-    validBookIds.has(reservation.bookId) &&
+    reconciledBookIds.has(reservation.bookId) &&
     validUserIds.has(reservation.userId),
+  );
+
+  const validTransactionIds = new Set(
+    normalizedTransactions.map((transaction) => transaction._id),
+  );
+
+  const normalizedReturnRequests = state.returnRequests.filter((request) =>
+    isUuid(request._id) &&
+    validTransactionIds.has(request.transactionId) &&
+    reconciledBookIds.has(request.bookId) &&
+    validUserIds.has(request.userId) &&
+    (!request.reviewedBy || validUserIds.has(request.reviewedBy)),
   );
 
   const normalizedReviews = state.reviews.filter((review) =>
     isUuid(review._id) &&
-    validBookIds.has(review.bookId) &&
+    reconciledBookIds.has(review.bookId) &&
     validUserIds.has(review.userId),
   );
 
@@ -525,20 +607,22 @@ async function writeSupabaseState(client: SupabaseClient, state: LibraryState) {
     code: branch.code,
     address: branch.address,
   })));
-  await upsertRows(client, "books", normalizedBooks.map(toBookRow));
-  await replaceBookBranches(client, normalizedBooks);
+  await upsertRows(client, "books", reconciledBooks.map(toBookRow));
+  await replaceBookBranches(client, reconciledBooks);
   await upsertRows(client, "transactions", normalizedTransactions.map(toTransactionRow));
   await upsertRows(client, "reservations", normalizedReservations.map(toReservationRow));
+  await upsertRows(client, "return_requests", normalizedReturnRequests.map(toReturnRequestRow));
   await upsertRows(client, "reviews", normalizedReviews.map(toReviewRow));
   await upsertRows(client, "notifications", normalizedNotifications.map(toNotificationRow));
   await upsertRows(client, "audit_logs", normalizedAuditLogs.map(toAuditLogRow));
 
   await deleteMissingRows(client, "transactions", normalizedTransactions.map((transaction) => transaction._id));
   await deleteMissingRows(client, "reservations", normalizedReservations.map((reservation) => reservation._id));
+  await deleteMissingRows(client, "return_requests", normalizedReturnRequests.map((request) => request._id));
   await deleteMissingRows(client, "reviews", normalizedReviews.map((review) => review._id));
   await deleteMissingRows(client, "notifications", normalizedNotifications.map((notification) => notification._id));
   await deleteMissingRows(client, "audit_logs", normalizedAuditLogs.map((log) => log._id));
-  await deleteMissingRows(client, "books", normalizedBooks.map((book) => book._id));
+  await deleteMissingRows(client, "books", reconciledBooks.map((book) => book._id));
 }
 
 export async function readState(): Promise<LibraryState> {
@@ -547,7 +631,7 @@ export async function readState(): Promise<LibraryState> {
     return ensureFileSeed();
   }
 
-  const [profiles, branches, bookRows, bookBranches, transactionRows, reservationRows, reviewRows, notificationRows, auditLogRows] =
+  const [profiles, branches, bookRows, bookBranches, transactionRows, reservationRows, returnRequestRows, reviewRows, notificationRows, auditLogRows] =
     await Promise.all([
       selectAll<ProfileRow>(client, "profiles"),
       selectAll<BranchRow>(client, "branches"),
@@ -555,6 +639,7 @@ export async function readState(): Promise<LibraryState> {
       selectAll<BookBranchRow>(client, "book_branches"),
       selectAll<TransactionRow>(client, "transactions"),
       selectAll<ReservationRow>(client, "reservations"),
+      selectAll<ReturnRequestRow>(client, "return_requests"),
       selectAll<ReviewRow>(client, "reviews"),
       selectAll<NotificationRow>(client, "notifications"),
       selectAll<AuditLogRow>(client, "audit_logs"),
@@ -569,6 +654,7 @@ export async function readState(): Promise<LibraryState> {
     books: bookRows.map((book) => mapBook(book, bookBranches, reviews)),
     transactions,
     reservations: reservationRows.map(mapReservation),
+    returnRequests: returnRequestRows.map(mapReturnRequest),
     reviews,
     notifications: notificationRows.map(mapNotification),
     auditLogs: auditLogRows.map(mapAuditLog),

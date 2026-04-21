@@ -3,11 +3,13 @@ import { z } from "zod";
 export const roles = ["admin", "librarian", "student"] as const;
 export const transactionStatuses = ["ISSUED", "RETURNED", "OVERDUE"] as const;
 export const reservationStatuses = ["WAITING", "READY", "FULFILLED", "CANCELLED"] as const;
+export const returnRequestStatuses = ["PENDING", "APPROVED", "DECLINED"] as const;
 export const notificationChannels = ["email", "sms", "in_app"] as const;
 
 export type Role = (typeof roles)[number];
 export type TransactionStatus = (typeof transactionStatuses)[number];
 export type ReservationStatus = (typeof reservationStatuses)[number];
+export type ReturnRequestStatus = (typeof returnRequestStatuses)[number];
 export type NotificationChannel = (typeof notificationChannels)[number];
 
 export const loginSchema = z.object({
@@ -91,6 +93,18 @@ export const reviewSchema = z.object({
   createdAt: z.string(),
 });
 
+export const returnRequestSchema = z.object({
+  _id: z.string(),
+  transactionId: z.string(),
+  bookId: z.string(),
+  userId: z.string(),
+  status: z.enum(returnRequestStatuses),
+  requestedAt: z.string(),
+  reviewedAt: z.string().optional(),
+  reviewedBy: z.string().optional(),
+  note: z.string().optional(),
+});
+
 export const notificationSchema = z.object({
   _id: z.string(),
   userId: z.string(),
@@ -124,7 +138,16 @@ export const returnBookSchema = z.object({
   scanCode: z.string().optional(),
 });
 
-export const createBookSchema = bookSchema.omit({
+export const createReturnRequestSchema = z.object({
+  transactionId: z.string(),
+  note: z.string().trim().max(300).optional(),
+});
+
+export const reviewReturnRequestSchema = z.object({
+  note: z.string().trim().max(300).optional(),
+});
+
+const baseCreateBookSchema = bookSchema.omit({
   _id: true,
   ratingAverage: true,
   ratingCount: true,
@@ -132,7 +155,24 @@ export const createBookSchema = bookSchema.omit({
   updatedAt: true,
 });
 
-export const updateBookSchema = createBookSchema.partial();
+export const createBookSchema = baseCreateBookSchema.refine((book) => book.availableCopies <= book.totalCopies, {
+  message: "Available copies cannot be greater than total copies",
+  path: ["availableCopies"],
+});
+
+export const updateBookSchema = baseCreateBookSchema.partial().superRefine((book, ctx) => {
+  if (
+    typeof book.availableCopies === "number" &&
+    typeof book.totalCopies === "number" &&
+    book.availableCopies > book.totalCopies
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Available copies cannot be greater than total copies",
+      path: ["availableCopies"],
+    });
+  }
+});
 
 export const createReviewSchema = z.object({
   bookId: z.string(),
@@ -189,6 +229,7 @@ export type Book = z.infer<typeof bookSchema>;
 export type Transaction = z.infer<typeof transactionSchema>;
 export type Reservation = z.infer<typeof reservationSchema>;
 export type Review = z.infer<typeof reviewSchema>;
+export type ReturnRequest = z.infer<typeof returnRequestSchema>;
 export type Notification = z.infer<typeof notificationSchema>;
 export type AuditLog = z.infer<typeof auditLogSchema>;
 export type DashboardData = z.infer<typeof dashboardSchema>;
@@ -197,6 +238,8 @@ export type CreateBookInput = z.infer<typeof createBookSchema>;
 export type UpdateBookInput = z.infer<typeof updateBookSchema>;
 export type IssueBookInput = z.infer<typeof issueBookSchema>;
 export type ReturnBookInput = z.infer<typeof returnBookSchema>;
+export type CreateReturnRequestInput = z.infer<typeof createReturnRequestSchema>;
+export type ReviewReturnRequestInput = z.infer<typeof reviewReturnRequestSchema>;
 export type CreateReviewInput = z.infer<typeof createReviewSchema>;
 export type UpdateUserRoleInput = z.infer<typeof updateUserRoleSchema>;
 

@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Route, Switch, useLocation } from "wouter";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Bell, ChevronLeft, ChevronRight } from "lucide-react";
+import { motion } from "framer-motion";
 import { queryClient } from "./lib/queryClient";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/toaster";
@@ -12,6 +13,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { supabaseBrowser } from "@/lib/supabase-browser";
+
+type ThemeMode = "light" | "dark" | "futuristic";
+type BaseTheme = "light" | "dark";
+
+const scrollReveal = {
+  hidden: { opacity: 0, y: 40, rotateX: 8, scale: 0.98 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    rotateX: 0,
+    scale: 1,
+    transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] },
+  },
+};
 
 function GoogleLogo() {
   return (
@@ -80,20 +95,30 @@ function LoginScreen() {
           </div>
           <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {presets.map((preset) => (
-              <button
+              <motion.button
                 key={preset.role}
                 type="button"
-                className="rounded-[1.75rem] border border-white/10 bg-white/5 p-5 text-left shadow-lg shadow-slate-950/20 transition hover:-translate-y-0.5 hover:border-cyan-400/40 hover:bg-cyan-400/10"
+                variants={scrollReveal}
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true, amount: 0.3 }}
+                whileHover={{ y: -4, rotateX: 4, rotateY: -4 }}
+                className="scroll-depth rounded-[1.75rem] border border-white/10 bg-white/5 p-5 text-left shadow-lg shadow-slate-950/20 transition hover:border-cyan-400/40 hover:bg-cyan-400/10"
                 onClick={() => applyPreset(preset)}
               >
                 <p className="text-xs uppercase tracking-[0.3em] text-cyan-200">{preset.role}</p>
                 <p className="mt-3 text-sm text-slate-300">{preset.note}</p>
                 <p className="mt-4 text-sm text-cyan-300">Continue as {preset.role.toLowerCase()}</p>
-              </button>
+              </motion.button>
             ))}
           </div>
         </div>
-        <div className="order-1 rounded-[2rem] border border-white/10 bg-white/10 p-5 shadow-2xl shadow-cyan-950/20 backdrop-blur sm:p-6 lg:order-2">
+        <motion.div
+          variants={scrollReveal}
+          initial="hidden"
+          animate="visible"
+          className="order-1 rounded-[2rem] border border-white/10 bg-white/10 p-5 shadow-2xl shadow-cyan-950/20 backdrop-blur sm:p-6 lg:order-2"
+        >
           <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-slate-950/30 p-1">
             <button
               type="button"
@@ -168,7 +193,7 @@ function LoginScreen() {
               </div>
             </>
           )}
-        </div>
+        </motion.div>
       </div>
     </div>
   );
@@ -178,11 +203,17 @@ function AuthCallbackScreen() {
   const { googleAuthMutation } = useAuth();
   const [, setLocation] = useLocation();
   const [status, setStatus] = useState("Finishing Google sign-in...");
+  const hasProcessedAuth = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
 
     const completeGoogleAuth = async () => {
+      if (hasProcessedAuth.current) {
+        return;
+      }
+      hasProcessedAuth.current = true;
+
       const searchParams = new URLSearchParams(window.location.search);
       const code = searchParams.get("code");
       const queryError = searchParams.get("error_description") || searchParams.get("error");
@@ -254,27 +285,23 @@ function AuthCallbackScreen() {
 
       window.history.replaceState({}, document.title, "/auth/callback");
 
-      googleAuthMutation.mutate(
-        {
+      try {
+        await googleAuthMutation.mutateAsync({
           accessToken,
           registrationNumber,
-        },
-        {
-          onSuccess: async () => {
-            sessionStorage.removeItem("google-auth-intent");
-            sessionStorage.removeItem("google-auth-registration-number");
-            await supabaseBrowser.auth.signOut();
-            if (!cancelled) {
-              setLocation("/");
-            }
-          },
-          onError: (mutationError) => {
-            if (!cancelled) {
-              setStatus(mutationError.message);
-            }
-          },
-        },
-      );
+        });
+        sessionStorage.removeItem("google-auth-intent");
+        sessionStorage.removeItem("google-auth-registration-number");
+        await supabaseBrowser.auth.signOut();
+        if (!cancelled) {
+          setLocation("/");
+        }
+      } catch (mutationError) {
+        hasProcessedAuth.current = false;
+        if (!cancelled) {
+          setStatus(mutationError instanceof Error ? mutationError.message : "Unable to complete Google sign-in.");
+        }
+      }
     };
 
     void completeGoogleAuth();
@@ -297,11 +324,17 @@ function AuthCallbackScreen() {
 
 function Card({ title, text, children }: { title: string; text: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-[1.75rem] border border-slate-200/80 bg-white/80 p-4 shadow-sm dark:border-white/10 dark:bg-white/5 sm:rounded-[2rem] sm:p-6">
+    <motion.section
+      variants={scrollReveal}
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: true, amount: 0.22 }}
+      className="scroll-depth scroll-shadow rounded-[1.75rem] border border-slate-200/80 bg-white/80 p-4 dark:border-white/10 dark:bg-white/5 sm:rounded-[2rem] sm:p-6"
+    >
       <h2 className="text-lg font-semibold sm:text-xl">{title}</h2>
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 sm:text-sm">{text}</p>
       <div className="mt-4 sm:mt-5">{children}</div>
-    </section>
+    </motion.section>
   );
 }
 
@@ -348,24 +381,33 @@ function getAutoLoanAlerts(transactions: any[], books: any[]) {
     .filter(Boolean);
 }
 
-function NotificationBell({ data }: { data: any }) {
+function NotificationBell({ data, actions }: { data: any; actions: any }) {
+  const { isStudent } = useAuth();
   const [open, setOpen] = useState(false);
   const [seenAlertIds, setSeenAlertIds] = useState<string[]>([]);
-  const autoAlerts = getAutoLoanAlerts(data.transactions, data.books);
-  const manualAlerts = data.notifications.map((notification: any) => ({
+  const autoAlerts = useMemo(() => getAutoLoanAlerts(data.transactions, data.books), [data.transactions, data.books]);
+  const manualAlerts = useMemo(() => data.notifications.map((notification: any) => ({
     id: notification._id,
+    notificationId: notification._id,
     title: notification.title,
     message: notification.message,
     meta: new Date(notification.createdAt).toLocaleString(),
     variant: "info",
-  }));
-  const alerts = [...autoAlerts, ...manualAlerts].slice(0, 6);
+    isPersisted: true,
+  })), [data.notifications]);
+  const alerts = useMemo(() => [...autoAlerts, ...manualAlerts].slice(0, 6), [autoAlerts, manualAlerts]);
+  const alertIds = useMemo(() => alerts.map((alert: any) => alert.id), [alerts]);
   const unseenAlerts = alerts.filter((alert: any) => !seenAlertIds.includes(alert.id));
 
   useEffect(() => {
-    if (!open || alerts.length === 0) return;
-    setSeenAlertIds((current) => Array.from(new Set([...current, ...alerts.map((alert: any) => alert.id)])));
-  }, [open, alerts]);
+    if (!open || alertIds.length === 0) return;
+    setSeenAlertIds((current) => {
+      const next = Array.from(new Set([...current, ...alertIds]));
+      return next.length === current.length ? current : next;
+    });
+  }, [open, alertIds]);
+
+  if (!isStudent) return null;
 
   return (
     <div className="relative shrink-0">
@@ -411,9 +453,21 @@ function NotificationBell({ data }: { data: any }) {
               >
                 <div className="flex items-start justify-between gap-3">
                   <p className="text-sm font-medium">{alert.title}</p>
-                  <span className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
-                    {alert.variant === "overdue" ? "Urgent" : alert.variant === "warning" ? "Soon" : "Info"}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                      {alert.variant === "overdue" ? "Urgent" : alert.variant === "warning" ? "Soon" : "Info"}
+                    </span>
+                    {alert.isPersisted ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={actions.deleteNotification.isPending}
+                        onClick={() => actions.deleteNotification.mutate(alert.notificationId)}
+                      >
+                        {actions.deleteNotification.isPending ? "Deleting..." : "Delete"}
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
                 <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{alert.message}</p>
                 <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{alert.meta}</p>
@@ -430,7 +484,7 @@ function NotificationBell({ data }: { data: any }) {
   );
 }
 
-function Dashboard({ data }: { data: any }) {
+function Dashboard({ data, actions }: { data: any; actions: any }) {
   const { isStudent, user } = useAuth();
   const activeLoans = data.transactions.filter((transaction: any) => transaction.status !== "RETURNED");
   const overdueLoans = activeLoans.filter((transaction: any) => transaction.status === "OVERDUE");
@@ -439,6 +493,7 @@ function Dashboard({ data }: { data: any }) {
   )[0];
   const topReader = data.dashboard.topReaderReward;
   const isTopReader = Boolean(isStudent && user && topReader?.userId === user._id);
+  const myReturnRequests = data.returnRequests || [];
 
   if (isStudent) {
     return (
@@ -480,6 +535,9 @@ function Dashboard({ data }: { data: any }) {
               const book = data.books.find((candidate: any) => candidate._id === transaction.bookId);
               const branch = data.branches.find((candidate: any) => candidate._id === transaction.branchId);
               const overdue = transaction.status === "OVERDUE";
+              const returnRequest = myReturnRequests
+                .filter((request: any) => request.transactionId === transaction._id)
+                .sort((a: any, b: any) => new Date(b.requestedAt).getTime() - new Date(a.requestedAt).getTime())[0];
 
               return (
                 <div
@@ -522,6 +580,30 @@ function Dashboard({ data }: { data: any }) {
                       <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Fine</p>
                       <p className="mt-2 font-medium">${transaction.fineAmount}</p>
                     </div>
+                  </div>
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                    {returnRequest ? (
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Return request: {returnRequest.status.toLowerCase()}
+                        {returnRequest.reviewedAt ? ` on ${new Date(returnRequest.reviewedAt).toLocaleDateString()}` : ""}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Send a return request and wait for staff approval.
+                      </p>
+                    )}
+                    <Button
+                      size="sm"
+                      className="rounded-xl"
+                      disabled={actions.requestReturn.isPending || returnRequest?.status === "PENDING"}
+                      onClick={() => actions.requestReturn.mutate({ transactionId: transaction._id })}
+                    >
+                      {returnRequest?.status === "PENDING"
+                        ? "Request pending"
+                        : actions.requestReturn.isPending
+                          ? "Sending..."
+                          : "Request return"}
+                    </Button>
                   </div>
                 </div>
               );
@@ -633,10 +715,15 @@ function DashboardHeroSlider() {
   const slide = slides[activeIndex];
 
   return (
-    <section className="relative overflow-hidden rounded-[2rem] border border-slate-200/80 bg-slate-950 text-white shadow-[0_25px_70px_-35px_rgba(15,23,42,0.75)] dark:border-white/10">
-      <div className={`absolute inset-0 bg-gradient-to-br ${slide.tone}`} />
-      <div className="relative p-4 sm:p-5 lg:p-6">
-        <div className="relative overflow-hidden rounded-[1.75rem] shadow-2xl shadow-slate-950/30">
+    <motion.section
+      variants={scrollReveal}
+      initial="hidden"
+      whileInView="visible"
+      viewport={{ once: true, amount: 0.35 }}
+      className="scroll-depth relative overflow-hidden rounded-[1.75rem] text-white shadow-[0_25px_70px_-35px_rgba(15,23,42,0.75)]"
+    >
+      <div className="relative scroll-float">
+        <div className="relative overflow-hidden rounded-[1.75rem]">
           <img src={slide.image} alt={`Library slide ${activeIndex + 1}`} className="h-[260px] w-full object-cover sm:h-[340px] lg:h-[420px]" />
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950/18 via-transparent to-transparent" />
           <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">
@@ -670,7 +757,7 @@ function DashboardHeroSlider() {
           </div>
         </div>
       </div>
-    </section>
+    </motion.section>
   );
 }
 
@@ -718,6 +805,21 @@ function Catalog({ data, canWrite, actions }: { data: any; canWrite: boolean; ac
                 </Button>
                 {book.ebookUrl ? <a href={book.ebookUrl} target="_blank" rel="noreferrer" className="rounded-xl border px-4 py-2 text-sm">Read eBook</a> : null}
                 {canWrite ? (
+                  <Button
+                    variant="outline"
+                    disabled={actions.updateBook.isPending}
+                    onClick={() => actions.updateBook.mutate({
+                      bookId: book._id,
+                      updates: {
+                        totalCopies: book.totalCopies + 1,
+                        availableCopies: Math.min(book.totalCopies + 1, book.availableCopies + 1),
+                      },
+                    })}
+                  >
+                    {actions.updateBook.isPending ? "Adding..." : "Add copy"}
+                  </Button>
+                ) : null}
+                {canWrite ? (
                   <Button variant="destructive" disabled={actions.deleteBook.isPending} onClick={() => actions.deleteBook.mutate(book._id)}>
                     {actions.deleteBook.isPending ? "Deleting..." : "Delete"}
                   </Button>
@@ -735,8 +837,22 @@ function Catalog({ data, canWrite, actions }: { data: any; canWrite: boolean; ac
               <Input key={key} placeholder={key} value={(form as any)[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
             ))}
             <Input type="number" value={form.publishedYear} onChange={(e) => setForm({ ...form, publishedYear: Number(e.target.value) })} />
-            <Input type="number" value={form.totalCopies} onChange={(e) => setForm({ ...form, totalCopies: Number(e.target.value) })} />
-            <Input type="number" value={form.availableCopies} onChange={(e) => setForm({ ...form, availableCopies: Number(e.target.value) })} />
+            <Input
+              type="number"
+              value={form.totalCopies}
+              onChange={(e) => {
+                const totalCopies = Math.max(0, Number(e.target.value));
+                setForm({ ...form, totalCopies, availableCopies: Math.min(form.availableCopies, totalCopies) });
+              }}
+            />
+            <Input
+              type="number"
+              value={form.availableCopies}
+              onChange={(e) => {
+                const availableCopies = Math.max(0, Number(e.target.value));
+                setForm({ ...form, availableCopies: Math.min(availableCopies, form.totalCopies) });
+              }}
+            />
             <select value={form.format} onChange={(e) => setForm({ ...form, format: e.target.value as any })} className="rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-white/10 dark:bg-slate-950">
               <option value="physical">physical</option>
               <option value="digital">digital</option>
@@ -769,6 +885,7 @@ function Circulation({ data, actions }: { data: any; actions: any }) {
   const activeLoans = data.transactions.filter((transaction: any) => transaction.status !== "RETURNED");
   const memberLoans = activeLoans.filter((transaction: any) => transaction.userId === selectedMemberId);
   const reservationRequests = data.reservations.filter((reservation: any) => reservation.status === "WAITING");
+  const returnRequests = (data.returnRequests || []).filter((request: any) => request.status === "PENDING");
 
   return (
     <div className="space-y-6">
@@ -878,6 +995,54 @@ function Circulation({ data, actions }: { data: any; actions: any }) {
           }) : (
             <div className="rounded-[1.5rem] border border-dashed border-slate-300/80 p-5 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
               No pending reservation requests right now.
+            </div>
+          )}
+        </div>
+      </Card>
+      <Card title="Return Requests" text="Review return requests sent by students before completing the book return.">
+        <div className="max-h-[24rem] space-y-3 overflow-y-auto pr-1 sm:max-h-[28rem]">
+          {returnRequests.length > 0 ? returnRequests.map((request: any) => {
+            const book = data.books.find((candidate: any) => candidate._id === request.bookId);
+            const user = data.users.find((candidate: any) => candidate._id === request.userId);
+            const transaction = data.transactions.find((candidate: any) => candidate._id === request.transactionId);
+            return (
+              <div key={request._id} className="rounded-[1.5rem] border border-slate-200/80 bg-white/80 p-4 dark:border-white/10 dark:bg-white/5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.3em] text-cyan-600 dark:text-cyan-300">Return request</p>
+                    <h3 className="mt-2 text-lg font-semibold">{book?.title || "Unknown title"}</h3>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                      {user?.name || "Unknown member"} | Requested {new Date(request.requestedAt).toLocaleDateString()}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      Due {transaction ? new Date(transaction.dueDate).toLocaleDateString() : "N/A"} | Fine ${transaction?.fineAmount ?? 0}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      className="rounded-xl"
+                      disabled={actions.approveReturnRequest.isPending || actions.declineReturnRequest.isPending}
+                      onClick={() => actions.approveReturnRequest.mutate(request._id)}
+                    >
+                      Approve return
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="rounded-xl"
+                      disabled={actions.approveReturnRequest.isPending || actions.declineReturnRequest.isPending}
+                      onClick={() => actions.declineReturnRequest.mutate(request._id)}
+                    >
+                      Decline
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            );
+          }) : (
+            <div className="rounded-[1.5rem] border border-dashed border-slate-300/80 p-5 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
+              No pending return requests right now.
             </div>
           )}
         </div>
@@ -997,13 +1162,15 @@ function Assistant({ data, actions }: { data: any; actions: any }) {
       id: "assistant-welcome",
       role: "assistant",
       content:
-        "Hi, how can I help you? I can manage availability, borrowed books, due dates, reservations, digital titles, and recommendations.",
+        "Hi, how can I help you? I can guide you through the whole app, including availability, borrowed books, due dates, reservations, circulation, notifications, and recommendations.",
     },
   ]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const quickPrompts = [
     "Is Clean Code available?",
     "Show my overdue books",
+    "How do reservations work?",
+    "How do I use this app?",
     "Recommend software engineering books",
     "Which digital books are available?",
   ];
@@ -1046,8 +1213,18 @@ function Assistant({ data, actions }: { data: any; actions: any }) {
         <p className="text-xs uppercase tracking-[0.32em] text-cyan-600 dark:text-cyan-300">AI Assistant</p>
         <h2 className="mt-3 text-3xl font-semibold sm:text-4xl">Ask with AI</h2>
         <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600 dark:text-slate-300 sm:text-base">
-          Get faster answers for library tasks, personal loans, reservations, digital access, and smart reading suggestions.
+          Get stronger help for the entire app, including library tasks, personal loans, reservations, digital access, staff workflows, and smart reading suggestions.
         </p>
+        <div className="mt-5">
+          <a
+            href="https://chatwithgenie.netlify.app"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center justify-center rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-medium text-slate-950 shadow-lg shadow-cyan-500/20 transition hover:-translate-y-0.5 hover:bg-cyan-300"
+          >
+            Learn with AI
+          </a>
+        </div>
       </div>
 
       <Card title="Conversation" text="Ask naturally and the assistant will answer using your live library data.">
@@ -1204,6 +1381,8 @@ function RegistrationNumberPrompt() {
 }
 
 function Admin({ data, actions }: { data: any; actions: any }) {
+  const { isAdmin } = useAuth();
+
   return (
     <div className="space-y-6">
       <Card title="Notifications" text="Email, SMS, and in-app updates generated by due dates and reservations.">
@@ -1247,6 +1426,7 @@ function Admin({ data, actions }: { data: any; actions: any }) {
           ) : null}
         </div>
       </Card>
+      {isAdmin ? (
       <Card title="Audit Trail" text="Track catalog actions, circulation, and role changes.">
         <div className="max-h-[28rem] space-y-3 overflow-y-auto pr-1">
           {data.auditLogs.map((log: any) => (
@@ -1257,6 +1437,7 @@ function Admin({ data, actions }: { data: any; actions: any }) {
           ))}
         </div>
       </Card>
+      ) : null}
     </div>
   );
 }
@@ -1265,13 +1446,21 @@ function Workspace() {
   const { user, isLoading, canWrite, isAdmin, isLibrarian, isStudent } = useAuth();
   const bootstrap = useBootstrap(!!user);
   const actions = useLibraryActions();
-  const [theme, setTheme] = useState<"light" | "dark">(() => (localStorage.getItem("theme") === "dark" ? "dark" : "light"));
+  const [baseTheme, setBaseTheme] = useState<BaseTheme>(() => {
+    const savedBaseTheme = localStorage.getItem("base-theme");
+    return savedBaseTheme === "dark" ? "dark" : "light";
+  });
+  const [isFuturistic, setIsFuturistic] = useState(() => localStorage.getItem("theme-mode") === "futuristic");
   const [location, setLocation] = useLocation();
+  const theme: ThemeMode = isFuturistic ? "futuristic" : baseTheme;
 
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", theme === "dark");
+    document.documentElement.classList.toggle("dark", isFuturistic || baseTheme === "dark");
+    document.documentElement.classList.toggle("futuristic", isFuturistic);
+    localStorage.setItem("base-theme", baseTheme);
+    localStorage.setItem("theme-mode", isFuturistic ? "futuristic" : "classic");
     localStorage.setItem("theme", theme);
-  }, [theme]);
+  }, [baseTheme, isFuturistic, theme]);
 
   useEffect(() => {
     if (location === "/auth/login") setLocation("/");
@@ -1302,18 +1491,41 @@ function Workspace() {
     { href: "/recommendations", label: "Recommendations" },
     { href: "/assistant", label: "Assistant" },
     ...(isAdmin ? [{ href: "/members", label: "Members" }] : []),
-    ...(isAdmin ? [{ href: "/admin", label: "Admin" }] : []),
+    ...(isAdmin || isLibrarian ? [{ href: "/admin", label: isAdmin ? "Admin" : "Notifications" }] : []),
   ];
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(135deg,#f8fafc,#eef2ff,#ecfeff)] text-slate-950 dark:bg-[linear-gradient(135deg,#020617,#0f172a,#111827)] dark:text-white">
+    <div
+      className={`min-h-screen ${
+        theme === "futuristic"
+          ? "bg-[radial-gradient(circle_at_top,_rgba(125,211,252,0.18),_transparent_28%),radial-gradient(circle_at_80%_12%,_rgba(244,114,182,0.14),_transparent_24%),linear-gradient(135deg,#030712,#0f172a,#111827,#1e1b4b)] text-slate-100"
+          : "bg-[linear-gradient(135deg,#f8fafc,#eef2ff,#ecfeff)] text-slate-950 dark:bg-[linear-gradient(135deg,#020617,#0f172a,#111827)] dark:text-white"
+      }`}
+    >
       <main className="min-h-screen p-3 sm:p-4 md:p-8">
         <div className="mx-auto max-w-7xl">
-          <MobileSidebar theme={theme} onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")} />
-          <div className="mb-4 flex flex-col gap-3 md:mb-6 md:flex-row md:items-end md:justify-between md:gap-4">
+          <MobileSidebar
+            theme={theme}
+            baseTheme={baseTheme}
+            isFuturistic={isFuturistic}
+            onToggleBaseTheme={() => setBaseTheme((currentTheme) => currentTheme === "dark" ? "light" : "dark")}
+            onToggleFuturistic={() => setIsFuturistic((currentTheme) => !currentTheme)}
+          />
+          <motion.div
+            variants={scrollReveal}
+            initial="hidden"
+            animate="visible"
+            className="mb-4 flex flex-col gap-3 md:mb-6 md:flex-row md:items-end md:justify-between md:gap-4"
+          >
             <div className="flex items-start gap-3">
               <div className="hidden md:block">
-                <Sidebar theme={theme} onToggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")} />
+                <Sidebar
+                  theme={theme}
+                  baseTheme={baseTheme}
+                  isFuturistic={isFuturistic}
+                  onToggleBaseTheme={() => setBaseTheme((currentTheme) => currentTheme === "dark" ? "light" : "dark")}
+                  onToggleFuturistic={() => setIsFuturistic((currentTheme) => !currentTheme)}
+                />
               </div>
               <div>
                 <p className="text-[11px] uppercase tracking-[0.28em] text-cyan-600 dark:text-cyan-300 sm:text-sm sm:tracking-[0.35em]">Lib Connect</p>
@@ -1325,33 +1537,39 @@ function Workspace() {
             </div>
             <div className="flex w-full items-center justify-between gap-3 md:w-auto md:justify-end">
               <div className="hidden md:block">
-                <NotificationBell data={data} />
+                <NotificationBell data={data} actions={actions} />
               </div>
               <select value={location} onChange={(e) => setLocation(e.target.value)} className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 md:hidden dark:border-white/10 dark:bg-slate-950">
                 {nav.map((item) => <option key={item.href} value={item.href}>{item.label}</option>)}
               </select>
               <div className="ml-auto md:hidden">
-                <NotificationBell data={data} />
+                <NotificationBell data={data} actions={actions} />
               </div>
             </div>
-          </div>
+          </motion.div>
 
           <Switch>
-            <Route path="/"><Dashboard data={data} /></Route>
+            <Route path="/"><Dashboard data={data} actions={actions} /></Route>
             <Route path="/catalog"><Catalog data={data} canWrite={canWrite} actions={actions} /></Route>
             {isAdmin || isLibrarian ? <Route path="/circulation"><Circulation data={data} actions={actions} /></Route> : null}
             <Route path="/recommendations"><Recommendations data={data} actions={actions} /></Route>
             <Route path="/assistant"><Assistant data={data} actions={actions} /></Route>
             {isAdmin ? <Route path="/members"><Members data={data} actions={actions} /></Route> : null}
-            {isAdmin ? <Route path="/admin"><Admin data={data} actions={actions} /></Route> : null}
+            {isAdmin || isLibrarian ? <Route path="/admin"><Admin data={data} actions={actions} /></Route> : null}
             <Route>
-              <div className="rounded-[2rem] border border-slate-200/80 bg-white/80 p-8 dark:border-white/10 dark:bg-white/5">
+              <motion.div
+                variants={scrollReveal}
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true, amount: 0.3 }}
+                className="scroll-depth scroll-shadow rounded-[2rem] border border-slate-200/80 bg-white/80 p-8 dark:border-white/10 dark:bg-white/5"
+              >
                 <p className="text-lg font-semibold">{isStudent ? "This section is only available to admin and librarian users." : "Page not found."}</p>
                 <div className="mt-4 flex gap-4">
                   <Link href="/">Dashboard</Link>
                   <Link href="/catalog">Catalog</Link>
                 </div>
-              </div>
+              </motion.div>
             </Route>
           </Switch>
         </div>

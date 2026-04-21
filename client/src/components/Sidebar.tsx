@@ -26,8 +26,11 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 
 type SidebarProps = {
-  theme: "light" | "dark";
-  onToggleTheme: () => void;
+  theme: "light" | "dark" | "futuristic";
+  baseTheme: "light" | "dark";
+  isFuturistic: boolean;
+  onToggleBaseTheme: () => void;
+  onToggleFuturistic: () => void;
 };
 
 function SidebarNav({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?: () => void }) {
@@ -41,7 +44,7 @@ function SidebarNav({ mobile = false, onNavigate }: { mobile?: boolean; onNaviga
     { icon: Sparkles, label: "Recommendations", href: "/recommendations" },
     { icon: Bot, label: "AI Assistant", href: "/assistant" },
     ...(isAdmin ? [{ icon: Users, label: "Members", href: "/members" }] : []),
-    ...(isAdmin ? [{ icon: ShieldCheck, label: "Admin", href: "/admin" }] : []),
+    ...(isAdmin || isLibrarian ? [{ icon: ShieldCheck, label: isAdmin ? "Admin" : "Notifications", href: "/admin" }] : []),
   ];
 
   return (
@@ -91,8 +94,10 @@ function SidebarNav({ mobile = false, onNavigate }: { mobile?: boolean; onNaviga
 }
 
 function SidebarShell({
-  theme,
-  onToggleTheme,
+  baseTheme,
+  isFuturistic,
+  onToggleBaseTheme,
+  onToggleFuturistic,
   mobile = false,
   onNavigate,
 }: SidebarProps & { mobile?: boolean; onNavigate?: () => void }) {
@@ -101,9 +106,8 @@ function SidebarShell({
   return (
     <>
       <div className="mb-8 flex items-center gap-3">
-        <div className="relative flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl bg-[linear-gradient(135deg,#22d3ee_0%,#2563eb_55%,#0f172a_100%)] shadow-lg shadow-cyan-950/40">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.35),transparent_45%)]" />
-          <BookOpen className="relative h-6 w-6" />
+        <div className="flex h-12 w-12 items-center justify-center">
+          <BookOpen className="h-6 w-6" />
         </div>
         <div>
           <p className="text-lg font-semibold tracking-tight">Lib Connect</p>
@@ -117,10 +121,18 @@ function SidebarShell({
         <Button
           variant="outline"
           className="w-full justify-start border-slate-200 bg-white/80 text-slate-700 hover:bg-slate-100 hover:text-slate-950 dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-white/10 dark:hover:text-white"
-          onClick={onToggleTheme}
+          onClick={onToggleBaseTheme}
         >
-          {theme === "dark" ? <SunMedium className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
-          {theme === "dark" ? "Light mode" : "Dark mode"}
+          {baseTheme === "dark" ? <SunMedium className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
+          {baseTheme === "dark" ? "Light mode" : "Dark mode"}
+        </Button>
+        <Button
+          variant="outline"
+          className="w-full justify-start border-slate-200 bg-white/80 text-slate-700 hover:bg-slate-100 hover:text-slate-950 dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-white/10 dark:hover:text-white"
+          onClick={onToggleFuturistic}
+        >
+          <Sparkles className="mr-2 h-4 w-4" />
+          {isFuturistic ? "Classic theme" : "Futuristic theme"}
         </Button>
         <Button
           variant="outline"
@@ -138,7 +150,7 @@ function SidebarShell({
   );
 }
 
-export function MobileSidebar({ theme, onToggleTheme }: SidebarProps) {
+export function MobileSidebar(props: SidebarProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -159,7 +171,7 @@ export function MobileSidebar({ theme, onToggleTheme }: SidebarProps) {
             <SheetDescription>Open app sections</SheetDescription>
           </SheetHeader>
           <div className="flex h-full flex-col">
-            <SidebarShell theme={theme} onToggleTheme={onToggleTheme} mobile onNavigate={() => setOpen(false)} />
+            <SidebarShell {...props} mobile onNavigate={() => setOpen(false)} />
           </div>
         </SheetContent>
       </Sheet>
@@ -167,7 +179,7 @@ export function MobileSidebar({ theme, onToggleTheme }: SidebarProps) {
   );
 }
 
-export function Sidebar({ theme, onToggleTheme }: SidebarProps) {
+export function Sidebar(props: SidebarProps) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -188,7 +200,7 @@ export function Sidebar({ theme, onToggleTheme }: SidebarProps) {
             <SheetDescription>Open app sections</SheetDescription>
           </SheetHeader>
           <div className="flex h-full flex-col">
-            <SidebarShell theme={theme} onToggleTheme={onToggleTheme} onNavigate={() => setOpen(false)} />
+            <SidebarShell {...props} onNavigate={() => setOpen(false)} />
           </div>
         </SheetContent>
       </Sheet>

@@ -1,12 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "@/hooks/use-toast";
 import type {
   AuthUser,
   Book,
   CreateBookInput,
   CreateReviewInput,
+  CreateReturnRequestInput,
   DashboardData,
   Notification,
   Reservation,
+  ReturnRequest,
   Review,
   Transaction,
   TransactionStatus,
@@ -51,6 +54,7 @@ export type BootstrapPayload = {
   books: Book[];
   transactions: Transaction[];
   reservations: Reservation[];
+  returnRequests: ReturnRequest[];
   reviews: Review[];
   notifications: Notification[];
   auditLogs: Array<{
@@ -71,7 +75,7 @@ export function useBootstrap(enabled: boolean) {
     queryKey: BOOTSTRAP_QUERY_KEY,
     queryFn: () => request<BootstrapPayload>("/api/bootstrap"),
     enabled,
-    refetchInterval: enabled ? 2000 : false,
+    refetchInterval: enabled ? 1000 : false,
     refetchOnWindowFocus: true,
   });
 }
@@ -85,6 +89,77 @@ export function useLibraryActions() {
   const updateBootstrap = (updater: (current: BootstrapPayload) => BootstrapPayload) => {
     queryClient.setQueryData<BootstrapPayload>(BOOTSTRAP_QUERY_KEY, (current) => (current ? updater(current) : current));
   };
+  const withRealtimeDashboard = (current: BootstrapPayload): BootstrapPayload => {
+    const activeTransactions = current.transactions.filter((transaction) => transaction.status !== "RETURNED");
+    const overdueItems = activeTransactions.filter((transaction) => transaction.status === "OVERDUE");
+    const borrowCounts = new Map<string, number>();
+    const activeUsers = new Map<string, number>();
+
+    for (const transaction of current.transactions) {
+      borrowCounts.set(transaction.bookId, (borrowCounts.get(transaction.bookId) || 0) + 1);
+      activeUsers.set(transaction.userId, (activeUsers.get(transaction.userId) || 0) + 1);
+    }
+
+    const topReaderReward = [...activeUsers.entries()]
+      .map(([userId, borrowCount]) => {
+        const user = current.users.find((candidate) => candidate._id === userId && candidate.role === "student");
+        if (!user) return null;
+        return {
+          userId,
+          name: user.name,
+          registrationNumber: user.registrationNumber,
+          borrowCount,
+          rewardTitle: "Top Reader Award",
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b!.borrowCount - a!.borrowCount)[0] || current.dashboard.topReaderReward;
+
+    return {
+      ...current,
+      dashboard: {
+        ...current.dashboard,
+        totals: {
+          ...current.dashboard.totals,
+          books: current.books.length,
+          users: current.users.length,
+          activeLoans: activeTransactions.length,
+          overdueBooks: overdueItems.length,
+          reservations: current.reservations.filter((reservation) => reservation.status === "WAITING" || reservation.status === "READY").length,
+          digitalTitles: current.books.filter((book) => book.format !== "physical").length,
+          fineRevenue: current.transactions.reduce((sum, transaction) => sum + transaction.fineAmount, 0),
+        },
+        mostBorrowedBooks: [...borrowCounts.entries()]
+          .map(([bookId, borrowCount]) => ({
+            bookId,
+            title: current.books.find((book) => book._id === bookId)?.title || "Unknown title",
+            borrowCount,
+          }))
+          .sort((a, b) => b.borrowCount - a.borrowCount)
+          .slice(0, 5),
+        activeUsers: [...activeUsers.entries()]
+          .map(([userId, borrowCount]) => ({
+            userId,
+            name: current.users.find((user) => user._id === userId)?.name || "Unknown user",
+            borrowCount,
+          }))
+          .sort((a, b) => b.borrowCount - a.borrowCount)
+          .slice(0, 5),
+        topReaderReward,
+        overdueItems,
+      },
+    };
+  };
+  const showMutationError = (error: unknown, fallback: string) => {
+    toast({
+      variant: "destructive",
+      title: "Action failed",
+      description: error instanceof Error ? error.message : fallback,
+    });
+  };
+  const showMutationSuccess = (title: string, description: string) => {
+    toast({ title, description });
+  };
 
   const createBook = useMutation({
     mutationFn: (payload: CreateBookInput) =>
@@ -92,7 +167,24 @@ export function useLibraryActions() {
         method: "POST",
         body: JSON.stringify(payload),
       }),
-    onSuccess: refresh,
+    onSuccess: async () => {
+      showMutationSuccess("Book added", "The catalog was updated.");
+      await refresh();
+    },
+    onError: (error) => showMutationError(error, "Unable to create book."),
+  });
+
+  const updateBook = useMutation({
+    mutationFn: (payload: { bookId: string; updates: Partial<Book> }) =>
+      request<Book>(`/api/books/${payload.bookId}`, {
+        method: "PUT",
+        body: JSON.stringify(payload.updates),
+      }),
+    onSuccess: async () => {
+      showMutationSuccess("Book updated", "Availability changed successfully.");
+      await refresh();
+    },
+    onError: (error) => showMutationError(error, "Unable to update book."),
   });
 
   const deleteBook = useMutation({
@@ -100,7 +192,11 @@ export function useLibraryActions() {
       request<void>(`/api/books/${bookId}`, {
         method: "DELETE",
       }),
-    onSuccess: refresh,
+    onSuccess: async () => {
+      showMutationSuccess("Book deleted", "The book was removed successfully.");
+      await refresh();
+    },
+    onError: (error) => showMutationError(error, "Unable to delete book."),
   });
 
   const issueBook = useMutation({
@@ -109,7 +205,11 @@ export function useLibraryActions() {
         method: "POST",
         body: JSON.stringify(payload),
       }),
-    onSuccess: refresh,
+    onSuccess: async () => {
+      showMutationSuccess("Book issued", "The loan was created and synced.");
+      await refresh();
+    },
+    onError: (error) => showMutationError(error, "Unable to issue book."),
   });
 
   const returnBook = useMutation({
@@ -136,7 +236,7 @@ export function useLibraryActions() {
               )
             : current.books;
 
-          return { ...current, transactions, books };
+          return withRealtimeDashboard({ ...current, transactions, books });
         });
       }
       return { previous };
@@ -145,8 +245,12 @@ export function useLibraryActions() {
       if (context?.previous) {
         queryClient.setQueryData(BOOTSTRAP_QUERY_KEY, context.previous);
       }
+      showMutationError(_error, "Unable to return book.");
     },
-    onSuccess: refresh,
+    onSuccess: async () => {
+      showMutationSuccess("Book returned", "Inventory and loan status updated.");
+      await refresh();
+    },
   });
 
   const reserveBook = useMutation({
@@ -154,7 +258,50 @@ export function useLibraryActions() {
       request<Reservation>(`/api/reservations/${bookId}`, {
         method: "POST",
       }),
-    onSuccess: refresh,
+    onSuccess: async () => {
+      showMutationSuccess("Book reserved", "Your reservation request was submitted.");
+      await refresh();
+    },
+    onError: (error) => showMutationError(error, "Unable to reserve book."),
+  });
+
+  const requestReturn = useMutation({
+    mutationFn: (payload: CreateReturnRequestInput) =>
+      request<ReturnRequest>("/api/return-requests", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: async () => {
+      showMutationSuccess("Return request sent", "The library team can now review your return request.");
+      await refresh();
+    },
+    onError: (error) => showMutationError(error, "Unable to create return request."),
+  });
+
+  const approveReturnRequest = useMutation({
+    mutationFn: (requestId: string) =>
+      request<ReturnRequest>(`/api/return-requests/${requestId}/approve`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
+    onSuccess: async () => {
+      showMutationSuccess("Return approved", "The book was marked as returned.");
+      await refresh();
+    },
+    onError: (error) => showMutationError(error, "Unable to approve return request."),
+  });
+
+  const declineReturnRequest = useMutation({
+    mutationFn: (requestId: string) =>
+      request<ReturnRequest>(`/api/return-requests/${requestId}/decline`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
+    onSuccess: async () => {
+      showMutationSuccess("Return declined", "The request was rejected.");
+      await refresh();
+    },
+    onError: (error) => showMutationError(error, "Unable to decline return request."),
   });
 
   const approveReservation = useMutation({
@@ -164,7 +311,7 @@ export function useLibraryActions() {
       }),
     onMutate: async (reservationId) => {
       const previous = queryClient.getQueryData<BootstrapPayload>(BOOTSTRAP_QUERY_KEY);
-      updateBootstrap((current) => ({
+      updateBootstrap((current) => withRealtimeDashboard({
         ...current,
         reservations: current.reservations.map((reservation) =>
           reservation._id === reservationId
@@ -178,8 +325,12 @@ export function useLibraryActions() {
       if (context?.previous) {
         queryClient.setQueryData(BOOTSTRAP_QUERY_KEY, context.previous);
       }
+      showMutationError(_error, "Unable to approve reservation.");
     },
-    onSuccess: refresh,
+    onSuccess: async () => {
+      showMutationSuccess("Reservation approved", "The member can now collect the book.");
+      await refresh();
+    },
   });
 
   const declineReservation = useMutation({
@@ -189,7 +340,7 @@ export function useLibraryActions() {
       }),
     onMutate: async (reservationId) => {
       const previous = queryClient.getQueryData<BootstrapPayload>(BOOTSTRAP_QUERY_KEY);
-      updateBootstrap((current) => ({
+      updateBootstrap((current) => withRealtimeDashboard({
         ...current,
         reservations: current.reservations.map((reservation) =>
           reservation._id === reservationId
@@ -203,8 +354,12 @@ export function useLibraryActions() {
       if (context?.previous) {
         queryClient.setQueryData(BOOTSTRAP_QUERY_KEY, context.previous);
       }
+      showMutationError(_error, "Unable to decline reservation.");
     },
-    onSuccess: refresh,
+    onSuccess: async () => {
+      showMutationSuccess("Reservation declined", "The request was updated.");
+      await refresh();
+    },
   });
 
   const addReview = useMutation({
@@ -213,7 +368,11 @@ export function useLibraryActions() {
         method: "POST",
         body: JSON.stringify(payload),
       }),
-    onSuccess: refresh,
+    onSuccess: async () => {
+      showMutationSuccess("Review added", "Your review is now visible.");
+      await refresh();
+    },
+    onError: (error) => showMutationError(error, "Unable to add review."),
   });
 
   const deleteReview = useMutation({
@@ -221,7 +380,11 @@ export function useLibraryActions() {
       request<void>(`/api/reviews/${reviewId}`, {
         method: "DELETE",
       }),
-    onSuccess: refresh,
+    onSuccess: async () => {
+      showMutationSuccess("Review deleted", "The review was removed.");
+      await refresh();
+    },
+    onError: (error) => showMutationError(error, "Unable to delete review."),
   });
 
   const updateRole = useMutation({
@@ -230,7 +393,11 @@ export function useLibraryActions() {
         method: "PATCH",
         body: JSON.stringify({ role: payload.role, branchId: payload.branchId }),
       }),
-    onSuccess: refresh,
+    onSuccess: async () => {
+      showMutationSuccess("Role updated", "The member role was changed.");
+      await refresh();
+    },
+    onError: (error) => showMutationError(error, "Unable to update role."),
   });
 
   const askAssistant = useMutation({
@@ -243,7 +410,11 @@ export function useLibraryActions() {
       request<void>(`/api/notifications/${notificationId}`, {
         method: "DELETE",
       }),
-    onSuccess: refresh,
+    onSuccess: async () => {
+      showMutationSuccess("Notification deleted", "The notification was removed.");
+      await refresh();
+    },
+    onError: (error) => showMutationError(error, "Unable to delete notification."),
   });
 
   const deleteAllNotifications = useMutation({
@@ -251,15 +422,23 @@ export function useLibraryActions() {
       request<void>("/api/notifications", {
         method: "DELETE",
       }),
-    onSuccess: refresh,
+    onSuccess: async () => {
+      showMutationSuccess("Notifications cleared", "The notification list was refreshed.");
+      await refresh();
+    },
+    onError: (error) => showMutationError(error, "Unable to delete notifications."),
   });
 
   return {
     createBook,
+    updateBook,
     deleteBook,
     issueBook,
     returnBook,
     reserveBook,
+    requestReturn,
+    approveReturnRequest,
+    declineReturnRequest,
     approveReservation,
     declineReservation,
     addReview,

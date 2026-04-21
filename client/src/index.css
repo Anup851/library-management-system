@@ -49,9 +49,32 @@
   --ring: 191 91% 46%;
 }
 
+.futuristic {
+  --background: 228 58% 7%;
+  --foreground: 210 40% 96%;
+  --card: 229 48% 11%;
+  --card-foreground: 210 40% 96%;
+  --popover: 229 48% 11%;
+  --popover-foreground: 210 40% 96%;
+  --primary: 199 89% 67%;
+  --primary-foreground: 230 53% 12%;
+  --secondary: 251 43% 20%;
+  --secondary-foreground: 210 40% 96%;
+  --muted: 228 34% 16%;
+  --muted-foreground: 220 20% 78%;
+  --accent: 327 67% 27%;
+  --accent-foreground: 210 40% 96%;
+  --border: 231 33% 25%;
+  --input: 228 34% 18%;
+  --ring: 199 89% 67%;
+}
+
 @layer base {
   * {
     @apply border-border;
+  }
+  html {
+    scroll-behavior: smooth;
   }
   body {
     @apply bg-background text-foreground antialiased font-sans transition-colors duration-300;
@@ -59,6 +82,91 @@
   h1, h2, h3, h4, h5, h6 {
     @apply font-display tracking-tight;
   }
+
+  .futuristic body {
+    background:
+      radial-gradient(circle at top, rgba(125, 211, 252, 0.18), transparent 26%),
+      radial-gradient(circle at 82% 18%, rgba(244, 114, 182, 0.12), transparent 22%),
+      radial-gradient(circle at 22% 78%, rgba(129, 140, 248, 0.1), transparent 20%),
+      linear-gradient(135deg, #030712 0%, #0f172a 44%, #1e1b4b 100%);
+  }
+}
+
+@layer utilities {
+  .scroll-depth {
+    transform-style: preserve-3d;
+    will-change: transform, opacity;
+  }
+
+  .scroll-float {
+    animation: float-slow 7s ease-in-out infinite;
+  }
+
+  .scroll-shadow {
+    box-shadow:
+      0 22px 50px -30px rgba(15, 23, 42, 0.35),
+      0 8px 18px -14px rgba(15, 23, 42, 0.18);
+  }
+
+  .futuristic .scroll-shadow {
+    box-shadow:
+      0 24px 60px -28px rgba(59, 130, 246, 0.34),
+      0 10px 22px -14px rgba(236, 72, 153, 0.2);
+  }
+}
+
+.futuristic .rounded-\[1\.25rem\],
+.futuristic .rounded-\[1\.5rem\],
+.futuristic .rounded-\[1\.75rem\],
+.futuristic .rounded-\[2rem\],
+.futuristic .rounded-2xl,
+.futuristic .rounded-xl {
+  position: relative;
+}
+
+.futuristic .border {
+  border-color: rgba(148, 163, 184, 0.16) !important;
+}
+
+.futuristic .bg-white\/5,
+.futuristic .bg-white\/70,
+.futuristic .bg-white\/80,
+.futuristic .bg-white\/85,
+.futuristic .bg-white\/88,
+.futuristic .bg-white\/90,
+.futuristic .bg-white\/95,
+.futuristic .bg-slate-50\/80,
+.futuristic .bg-slate-100\/80,
+.futuristic .bg-slate-950\/30,
+.futuristic .bg-slate-950\/40,
+.futuristic .bg-slate-950\/80,
+.futuristic .bg-slate-950\/90,
+.futuristic .bg-slate-950\/92 {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.84), rgba(30, 27, 75, 0.58)) !important;
+  backdrop-filter: blur(20px);
+}
+
+.futuristic .text-cyan-600,
+.futuristic .text-cyan-300 {
+  color: #7dd3fc !important;
+}
+
+.futuristic .bg-cyan-500\/10,
+.futuristic .bg-cyan-400 {
+  background: linear-gradient(135deg, rgba(125, 211, 252, 0.94), rgba(129, 140, 248, 0.92), rgba(244, 114, 182, 0.86)) !important;
+  color: #020617 !important;
+}
+
+.futuristic .bg-amber-50\/90,
+.futuristic .bg-amber-500\/10,
+.futuristic .bg-rose-50\/80,
+.futuristic .bg-rose-500\/10 {
+  backdrop-filter: blur(18px);
+}
+
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
 }
 ::-webkit-scrollbar {
   width: 8px;

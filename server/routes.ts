@@ -5,9 +5,11 @@ import { z } from "zod";
 import {
   chatbotSchema,
   createBookSchema,
+  createReturnRequestSchema,
   createReviewSchema,
   issueBookSchema,
   loginSchema,
+  reviewReturnRequestSchema,
   returnBookSchema,
   updateBookSchema,
   updateUserRoleSchema,
@@ -16,6 +18,7 @@ import {
   type DashboardData,
   type Notification,
   type Reservation,
+  type ReturnRequest,
   type Review,
   type Role,
   type Transaction,
@@ -185,6 +188,36 @@ function formatBookCard(book: Book, branches: { _id: string; name: string }[]) {
   return lines.join("\n");
 }
 
+function matchesAny(normalized: string, terms: string[]) {
+  return terms.some((term) => normalized.includes(term));
+}
+
+function buildAppGuide(currentUser: User, overdueLoans: Transaction[], waitingReservations: Reservation[]) {
+  const sections = [
+    "- Dashboard: check totals, reading activity, and quick status.",
+    "- Catalog: search books, view availability, reserve titles, and open eBooks.",
+    "- Recommendations: discover books based on history, categories, and ratings.",
+    "- AI Assistant: ask about books, app usage, fines, reservations, and workflows.",
+  ];
+
+  if (currentUser.role === "admin" || currentUser.role === "librarian") {
+    sections.push("- Circulation: issue books, process returns, and handle reservation requests.");
+    sections.push(`- ${currentUser.role === "admin" ? "Members/Admin" : "Notifications"}: manage people, alerts, and operations.`);
+  }
+
+  return [
+    `I can help you with almost every part of Lib Connect, ${currentUser.name.split(" ")[0]}.`,
+    sections.join("\n"),
+    overdueLoans.length > 0
+      ? `You currently have ${overdueLoans.length} overdue loan${overdueLoans.length === 1 ? "" : "s"}.`
+      : "You do not have overdue loans right now.",
+    waitingReservations.length > 0
+      ? `You also have ${waitingReservations.length} active reservation${waitingReservations.length === 1 ? "" : "s"}.`
+      : "You do not have active reservations right now.",
+    "Try prompts like: how do I issue a book, show my loans, how do reservations work, or help me manage this app.",
+  ].join("\n\n");
+}
+
 function buildChatResponse(
   message: string,
   books: Book[],
@@ -212,6 +245,25 @@ function buildChatResponse(
     .filter((transaction) => transaction.status === "ISSUED")
     .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
     .slice(0, 3);
+  const appHelpIntent = matchesAny(normalized, [
+    "how do i use",
+    "how to use",
+    "how this app works",
+    "how does this app work",
+    "help me use",
+    "what can you do",
+    "what does this app do",
+    "guide me",
+    "app help",
+    "portal help",
+    "manage this app",
+    "use this portal",
+  ]);
+  const dashboardIntent = matchesAny(normalized, ["dashboard", "summary", "overview", "stats"]);
+  const circulationIntent = matchesAny(normalized, ["issue", "return", "circulation", "checkout", "check out"]);
+  const memberIntent = matchesAny(normalized, ["member", "members", "user role", "student role", "librarian role", "admin role"]);
+  const notificationIntent = matchesAny(normalized, ["notification", "notifications", "alerts", "reminder", "reminders"]);
+  const reviewIntent = matchesAny(normalized, ["review", "reviews", "rating", "ratings"]);
 
   if (greetingIntent) {
     const nextDueLoan = dueSoonLoans[0];
@@ -227,6 +279,29 @@ function buildChatResponse(
           : "You can ask things like: ask with AI about my borrowed books, show digital books, or recommend technology titles.",
       ].join("\n\n"),
       suggestedBooks: recommendations,
+    };
+  }
+
+  if (appHelpIntent) {
+    return {
+      reply: buildAppGuide(currentUser, overdueLoans, waitingReservations),
+      suggestedBooks: recommendations,
+    };
+  }
+
+  if (dashboardIntent) {
+    return {
+      reply: [
+        "The Dashboard is the best place to get a quick summary of the app.",
+        `- Total active loans in the system: ${activeLoans.length}`,
+        `- Your active loans: ${userLoans.length}`,
+        `- Your overdue loans: ${overdueLoans.length}`,
+        `- Your active reservations: ${waitingReservations.length}`,
+        "Use it when you want a quick snapshot before moving to catalog, circulation, or recommendations.",
+      ].join("\n"),
+      suggestedBooks: dueSoonLoans
+        .map((loan) => books.find((candidate) => candidate._id === loan.bookId))
+        .filter(Boolean) as Book[],
     };
   }
 
@@ -250,6 +325,33 @@ function buildChatResponse(
       suggestedBooks: overdueLoans
         .map((loan) => books.find((candidate) => candidate._id === loan.bookId))
         .filter(Boolean) as Book[],
+    };
+  }
+
+  if (circulationIntent) {
+    if (currentUser.role === "student") {
+      return {
+        reply: [
+          "You do not have staff circulation controls, but I can still help you with circulation-related tasks.",
+          "- Ask me which books are available before visiting the desk.",
+          "- Ask me about your borrowed books, due dates, fines, or reservation status.",
+          "- A librarian or admin can issue or return books from the Circulation section.",
+        ].join("\n"),
+        suggestedBooks: dueSoonLoans
+          .map((loan) => books.find((candidate) => candidate._id === loan.bookId))
+          .filter(Boolean) as Book[],
+      };
+    }
+
+    return {
+      reply: [
+        "Open the Circulation section for issue and return workflows.",
+        "- Issue books by selecting member, branch, title, and due date.",
+        "- Return books by choosing the active loan or scanning the code.",
+        "- Reservation decisions can also be handled from the same workspace.",
+        "If you want, ask me about a specific borrower or book first.",
+      ].join("\n"),
+      suggestedBooks: recommendations,
     };
   }
 
@@ -340,6 +442,60 @@ function buildChatResponse(
     };
   }
 
+  if (memberIntent) {
+    if (currentUser.role !== "admin") {
+      return {
+        reply: [
+          "Member management is mainly available to admin users.",
+          "- Admins can review members and update roles.",
+          "- Librarians focus on circulation and operational tasks.",
+          "- Students manage borrowing, reservations, and reviews.",
+        ].join("\n"),
+        suggestedBooks: recommendations,
+      };
+    }
+
+    return {
+      reply: [
+        "Open the Members section to manage people in the app.",
+        "- Review member details and activity.",
+        "- Change roles between student, librarian, and admin.",
+        "- Use the Admin area to track alerts and audit activity alongside member actions.",
+      ].join("\n"),
+      suggestedBooks: recommendations,
+    };
+  }
+
+  if (notificationIntent) {
+    return {
+      reply: currentUser.role === "admin" || currentUser.role === "librarian"
+        ? [
+            "Notifications help staff track reminders, reservation updates, and circulation events.",
+            "- Review alerts from the admin tools.",
+            "- Students mainly receive reminders and reservation updates.",
+            "- I can also help you inspect loans or reservation queues right here in chat.",
+          ].join("\n")
+        : [
+            "Notifications help you track reservations, reminders, and overdue activity.",
+            "- Check them for reservation updates and due reminders.",
+            "- Ask me here if you want a quick summary of your loans or reservations.",
+          ].join("\n"),
+      suggestedBooks: recommendations,
+    };
+  }
+
+  if (reviewIntent) {
+    return {
+      reply: [
+        "Reviews improve the quality of recommendations in the app.",
+        "- Rate books after reading them.",
+        "- Add a short comment so future suggestions become smarter.",
+        "- Ask me for recommendations first, then review the book you choose.",
+      ].join("\n"),
+      suggestedBooks: recommendations,
+    };
+  }
+
   if (normalized.includes("category") || normalized.includes("subject") || categoryMatches.length > 0) {
     const targetBooks = categoryMatches.length > 0 ? categoryMatches : recommendations;
     return {
@@ -358,7 +514,12 @@ function buildChatResponse(
   }
 
   return {
-    reply: "Hi, I can help you manage library tasks at a top level. Ask with AI about availability, your borrowed books, reservations, overdue fines, digital titles, categories, or smart recommendations.",
+    reply: [
+      "I can help with both library data and how to use the app.",
+      "- Ask about availability, due dates, reservations, digital books, fines, circulation, members, notifications, or reviews.",
+      "- You can also ask how a section works or what to do next in Lib Connect.",
+      "Try: show my loans, how do reservations work, how do I issue a book, or recommend books for me.",
+    ].join("\n"),
     suggestedBooks: recommendations,
   };
 }
@@ -406,6 +567,11 @@ function normalizeBookCopies(book: Book) {
   book.availableCopies = Math.min(Math.max(0, book.availableCopies), book.totalCopies);
 }
 
+function clampAvailableCopies(availableCopies: number, totalCopies: number) {
+  const safeTotalCopies = Math.max(0, totalCopies);
+  return Math.min(Math.max(0, availableCopies), safeTotalCopies);
+}
+
 function reindexReservationQueue(reservations: Reservation[], bookId: string) {
   reservations
     .filter((reservation) => reservation.bookId === bookId && reservation.status === "WAITING")
@@ -413,6 +579,59 @@ function reindexReservationQueue(reservations: Reservation[], bookId: string) {
     .forEach((reservation, index) => {
       reservation.position = index + 1;
     });
+}
+
+function processReturnApproval(
+  state: Awaited<ReturnType<typeof readState>>,
+  transaction: Transaction,
+  actorId: string,
+) {
+  const book = state.books.find((candidate) => candidate._id === transaction.bookId);
+  if (!book) {
+    throw new Error("Book not found");
+  }
+
+  const actorExists = state.users.some((candidate) => candidate._id === actorId);
+  transaction.returnedAt = nowIso();
+  transaction.returnedTo = actorExists ? actorId : undefined;
+  transaction.fineAmount = computeFine(transaction.dueDate);
+  transaction.status = "RETURNED";
+  book.availableCopies += 1;
+  normalizeBookCopies(book);
+
+  const relatedRequests = state.returnRequests.filter(
+    (request) => request.transactionId === transaction._id && request.status === "PENDING",
+  );
+  for (const request of relatedRequests) {
+    request.status = "APPROVED";
+    request.reviewedAt = nowIso();
+    request.reviewedBy = actorId;
+  }
+
+  const returnAudit = writeAudit(state.auditLogs, actorId, "RETURN_BOOK", "transaction", transaction._id, {
+    bookId: transaction.bookId,
+    userId: transaction.userId,
+    fineAmount: transaction.fineAmount,
+  });
+  const createdNotifications: Notification[] = [];
+  createdNotifications.push(
+    notify(state.notifications, transaction.userId, "Book Returned", `${book.title} has been returned successfully.`),
+  );
+
+  const nextReservation = state.reservations
+    .filter((reservation) => reservation.bookId === book._id && reservation.status === "WAITING")
+    .sort((a, b) => a.position - b.position)[0];
+
+  if (nextReservation) {
+    const queuedUser = state.users.find((candidate) => candidate._id === nextReservation.userId);
+    createdNotifications.push(...notifyStaff(
+      state,
+      "Reservation Needs Review",
+      `${book.title} was returned and ${queuedUser?.name || "a student"} has a pending request waiting for approval.`,
+    ));
+  }
+
+  return { book, returnAudit, createdNotifications };
 }
 
 function currentUserOrThrow(req: AuthenticatedRequest, users: User[]) {
@@ -433,6 +652,11 @@ function userVisibleReservations(role: Role, userId: string, reservations: Reser
   return reservations.filter(
     (reservation) => reservation.userId === userId && (reservation.status === "WAITING" || reservation.status === "READY"),
   );
+}
+
+function userVisibleReturnRequests(role: Role, userId: string, returnRequests: ReturnRequest[]) {
+  if (isStaff(role)) return returnRequests;
+  return returnRequests.filter((request) => request.userId === userId);
 }
 
 function userVisibleNotifications(role: Role, userId: string, notifications: Notification[]) {
@@ -464,6 +688,30 @@ function getSupabaseAuthClient() {
 
 function shouldUseDirectSupabasePersistence() {
   return Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
+}
+
+async function deleteNotificationDirect(notificationId: string) {
+  const client = getSupabaseAuthClient();
+  const { error } = await client.from("notifications").delete().eq("id", notificationId);
+  if (error) {
+    throw new Error(`Unable to delete notification: ${error.message}`);
+  }
+}
+
+async function deleteNotificationsDirectForUser(userId: string) {
+  const client = getSupabaseAuthClient();
+  const { error } = await client.from("notifications").delete().eq("user_id", userId);
+  if (error) {
+    throw new Error(`Unable to delete notifications: ${error.message}`);
+  }
+}
+
+async function deleteAllNotificationsDirect() {
+  const client = getSupabaseAuthClient();
+  const { error } = await client.from("notifications").delete().not("id", "is", null);
+  if (error) {
+    throw new Error(`Unable to delete notifications: ${error.message}`);
+  }
 }
 
 async function persistReturnDirect(
@@ -507,7 +755,7 @@ async function persistReturnDirect(
 
     const { data: liveBook, error: liveBookError } = await client
       .from("books")
-      .select("id")
+      .select("id, total_copies")
       .or(`isbn.eq.${book.isbn},barcode.eq.${book.barcode}`)
       .limit(1)
       .maybeSingle();
@@ -557,7 +805,10 @@ async function persistReturnDirect(
     }
 
     const { error: liveBookUpdateError } = await client.from("books").update({
-      available_copies: book.availableCopies,
+      available_copies: clampAvailableCopies(
+        book.availableCopies,
+        typeof liveBook.total_copies === "number" ? liveBook.total_copies : book.totalCopies,
+      ),
       updated_at: nowIso(),
     }).eq("id", liveBook.id);
     if (liveBookUpdateError) throw new Error(liveBookUpdateError.message);
@@ -570,7 +821,7 @@ async function persistReturnDirect(
 
   if (!shouldUseLookupFallback) {
     const { error: bookError } = await client.from("books").update({
-      available_copies: book.availableCopies,
+      available_copies: clampAvailableCopies(book.availableCopies, book.totalCopies),
       updated_at: nowIso(),
     }).eq("id", book._id);
     if (bookError) throw new Error(bookError.message);
@@ -668,6 +919,70 @@ async function persistReservationDecisionDirect(
   }
 }
 
+async function persistReservationCreateDirect(
+  reservation: Reservation,
+  waitingReservations: Reservation[],
+  notifications: Notification[],
+  auditLog?: AuditLog,
+) {
+  const client = getSupabaseAuthClient();
+
+  const { error: reservationError } = await client.from("reservations").insert({
+    ...(isUuid(reservation._id) ? { id: reservation._id } : {}),
+    book_id: reservation.bookId,
+    user_id: reservation.userId,
+    status: reservation.status,
+    position: reservation.position,
+    created_at: reservation.createdAt,
+    notified_at: reservation.notifiedAt || null,
+  });
+  if (reservationError) throw new Error(reservationError.message);
+
+  if (waitingReservations.length > 0) {
+    const { error: queueError } = await client.from("reservations").upsert(waitingReservations.map((item) => ({
+      id: item._id,
+      book_id: item.bookId,
+      user_id: item.userId,
+      status: item.status,
+      position: item.position,
+      created_at: item.createdAt,
+      notified_at: item.notifiedAt || null,
+    })));
+    if (queueError) throw new Error(queueError.message);
+  }
+
+  const validNotifications = notifications.filter((notification) => isUuid(notification.userId));
+  if (validNotifications.length > 0) {
+    const { error: notificationError } = await client.from("notifications").insert(validNotifications.map((notification) => ({
+      ...(isUuid(notification._id) ? { id: notification._id } : {}),
+      user_id: notification.userId,
+      title: notification.title,
+      message: notification.message,
+      channel: notification.channel,
+      read: notification.read,
+      created_at: notification.createdAt,
+    })));
+    if (notificationError) {
+      console.warn("Non-blocking notification write failed during reservation create:", notificationError.message);
+    }
+  }
+
+  if (auditLog && isUuid(auditLog.actorId)) {
+    const { error: auditError } = await client.from("audit_logs").insert({
+      ...(isUuid(auditLog._id) ? { id: auditLog._id } : {}),
+      actor_id: auditLog.actorId,
+      action: auditLog.action,
+      entity: auditLog.entity,
+      entity_id: isUuid(auditLog.entityId) ? auditLog.entityId : null,
+      details: auditLog.details,
+      created_at: auditLog.createdAt,
+    });
+    if (auditError) {
+      console.warn("Non-blocking audit write failed during reservation create:", auditError.message);
+    }
+  }
+}
+
 async function persistIssueDirect(
   transaction: Transaction,
   book: Book,
@@ -680,7 +995,7 @@ async function persistIssueDirect(
 
   const { data: liveBook, error: liveBookError } = await client
     .from("books")
-    .select("id, available_copies")
+    .select("id, available_copies, total_copies")
     .or(`isbn.eq.${book.isbn},barcode.eq.${book.barcode}`)
     .limit(1)
     .maybeSingle();
@@ -730,8 +1045,9 @@ async function persistIssueDirect(
   if (transactionError) throw new Error(transactionError.message);
 
   const liveAvailableCopies = typeof liveBook.available_copies === "number" ? liveBook.available_copies : book.availableCopies + 1;
+  const liveTotalCopies = typeof liveBook.total_copies === "number" ? liveBook.total_copies : book.totalCopies;
   const { error: bookError } = await client.from("books").update({
-    available_copies: Math.max(0, liveAvailableCopies - 1),
+    available_copies: clampAvailableCopies(liveAvailableCopies - 1, liveTotalCopies),
     updated_at: nowIso(),
   }).eq("id", liveBook.id);
   if (bookError) throw new Error(bookError.message);
@@ -967,9 +1283,9 @@ export function registerRoutes(app: Express) {
       const currentUser = currentUserOrThrow(req, safeUsers);
       const transactions = userVisibleTransactions(currentUser.role, currentUser._id, transactionsWithComputedStatus);
       const reservations = userVisibleReservations(currentUser.role, currentUser._id, state.reservations);
+      const returnRequests = userVisibleReturnRequests(currentUser.role, currentUser._id, state.returnRequests || []);
       const notifications = userVisibleNotifications(currentUser.role, currentUser._id, state.notifications);
       const visibleUsers = userVisibleUsers(currentUser.role, currentUser._id, safeUsers);
-      const dashboardUsers = currentUser.role === "student" ? [currentUser] : safeUsers;
 
       return res.json({
         user: currentUser,
@@ -978,10 +1294,11 @@ export function registerRoutes(app: Express) {
         books: state.books || [],
         transactions,
         reservations,
+        returnRequests,
         reviews: state.reviews || [],
         notifications,
         auditLogs: currentUser.role === "admin" ? state.auditLogs.slice(0, 20) : [],
-        dashboard: getDashboardData(state.books || [], dashboardUsers || [], transactionsWithComputedStatus || [], reservations || []),
+        dashboard: getDashboardData(state.books || [], safeUsers || [], transactionsWithComputedStatus || [], state.reservations || []),
         recommendations: recommendBooks(currentUser, state.books || []),
       });
     } catch (error) {
@@ -1058,9 +1375,13 @@ export function registerRoutes(app: Express) {
     }
   });
 
-  app.delete("/api/books/:id", requireAuth, requireRole(["admin"]), async (req: AuthenticatedRequest, res) => {
+  app.delete("/api/books/:id", requireAuth, requireRole(["admin", "librarian"]), async (req: AuthenticatedRequest, res) => {
     const bookId = String(req.params.id);
     const state = await readState();
+    const existingBook = state.books.find((book) => book._id === bookId);
+    if (!existingBook) {
+      return res.status(404).json({ message: "Book not found" });
+    }
     state.transactions = state.transactions.filter((transaction) => transaction.bookId !== bookId);
     state.reservations = state.reservations.filter((reservation) => reservation.bookId !== bookId);
     state.reviews = state.reviews.filter((review) => review.bookId !== bookId);
@@ -1107,6 +1428,156 @@ export function registerRoutes(app: Express) {
     const safeUsers = state.users.map(publicUser);
     const currentUser = currentUserOrThrow(req, safeUsers);
     return res.json(userVisibleTransactions(currentUser.role, currentUser._id, state.transactions));
+  });
+
+  app.get("/api/return-requests", requireAuth, async (req: AuthenticatedRequest, res) => {
+    const state = await readState();
+    const safeUsers = state.users.map(publicUser);
+    const currentUser = currentUserOrThrow(req, safeUsers);
+    return res.json(userVisibleReturnRequests(currentUser.role, currentUser._id, state.returnRequests || []));
+  });
+
+  app.post("/api/return-requests", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const input = parseBody(createReturnRequestSchema, req.body);
+      const state = await readState();
+      state.transactions = updateTransactionStatuses(state.transactions);
+      const safeUsers = state.users.map(publicUser);
+      const currentUser = currentUserOrThrow(req, safeUsers);
+
+      const transaction = state.transactions.find((candidate) => candidate._id === input.transactionId);
+      if (!transaction) {
+        return res.status(404).json({ message: "Transaction not found" });
+      }
+      if (transaction.userId !== currentUser._id) {
+        return res.status(403).json({ message: "You can only request returns for your own borrowed books" });
+      }
+      if (transaction.status === "RETURNED") {
+        return res.status(400).json({ message: "This book has already been returned" });
+      }
+
+      const existingRequest = (state.returnRequests || []).find(
+        (request) => request.transactionId === transaction._id && request.status === "PENDING",
+      );
+      if (existingRequest) {
+        return res.status(400).json({ message: "A return request is already pending for this book" });
+      }
+
+      const book = state.books.find((candidate) => candidate._id === transaction.bookId);
+      const returnRequest: ReturnRequest = {
+        _id: makeId("return_request"),
+        transactionId: transaction._id,
+        bookId: transaction.bookId,
+        userId: currentUser._id,
+        status: "PENDING",
+        requestedAt: nowIso(),
+        note: input.note,
+      };
+
+      state.returnRequests = state.returnRequests || [];
+      state.returnRequests.unshift(returnRequest);
+      notify(
+        state.notifications,
+        currentUser._id,
+        "Return Request Sent",
+        `${book?.title || "Your borrowed book"} return request was sent for staff approval.`,
+      );
+      notifyStaff(
+        state,
+        "Return Request Pending",
+        `${currentUser.name} requested return approval for ${book?.title || "a borrowed book"}.`,
+      );
+      writeAudit(state.auditLogs, currentUser._id, "CREATE_RETURN_REQUEST", "return_request", returnRequest._id, {
+        transactionId: transaction._id,
+        bookId: transaction.bookId,
+      });
+      await writeState(state);
+      return res.status(201).json(returnRequest);
+    } catch (error) {
+      return res.status(400).json({ message: error instanceof Error ? error.message : "Unable to create return request" });
+    }
+  });
+
+  app.post("/api/return-requests/:id/approve", requireAuth, requireRole(["admin", "librarian"]), async (req: AuthenticatedRequest, res) => {
+    try {
+      const input = parseBody(reviewReturnRequestSchema, req.body || {});
+      const state = await readState();
+      const returnRequest = (state.returnRequests || []).find((candidate) => candidate._id === String(req.params.id));
+      if (!returnRequest) {
+        return res.status(404).json({ message: "Return request not found" });
+      }
+      if (returnRequest.status !== "PENDING") {
+        return res.status(400).json({ message: `This request is already ${returnRequest.status.toLowerCase()}` });
+      }
+
+      const transaction = state.transactions.find((candidate) => candidate._id === returnRequest.transactionId);
+      if (!transaction) {
+        return res.status(404).json({ message: "Transaction not found for this request" });
+      }
+
+      const borrower = state.users.find((candidate) => candidate._id === transaction.userId);
+      returnRequest.status = "APPROVED";
+      returnRequest.reviewedAt = nowIso();
+      returnRequest.reviewedBy = req.auth!.userId;
+      returnRequest.note = input.note || returnRequest.note;
+
+      const { book, returnAudit, createdNotifications } = processReturnApproval(state, transaction, req.auth!.userId);
+      notify(
+        state.notifications,
+        returnRequest.userId,
+        "Return Request Approved",
+        `${book.title} return request was approved by the library team.`,
+      );
+      writeAudit(state.auditLogs, req.auth!.userId, "APPROVE_RETURN_REQUEST", "return_request", returnRequest._id, {
+        transactionId: transaction._id,
+        bookId: transaction.bookId,
+      });
+
+      if (shouldUseDirectSupabasePersistence()) {
+        await persistReturnDirect(transaction, book, borrower, createdNotifications, returnAudit);
+        await writeState(state);
+      } else {
+        await writeState(state);
+      }
+
+      return res.json(returnRequest);
+    } catch (error) {
+      return res.status(400).json({ message: error instanceof Error ? error.message : "Unable to approve return request" });
+    }
+  });
+
+  app.post("/api/return-requests/:id/decline", requireAuth, requireRole(["admin", "librarian"]), async (req: AuthenticatedRequest, res) => {
+    try {
+      const input = parseBody(reviewReturnRequestSchema, req.body || {});
+      const state = await readState();
+      const returnRequest = (state.returnRequests || []).find((candidate) => candidate._id === String(req.params.id));
+      if (!returnRequest) {
+        return res.status(404).json({ message: "Return request not found" });
+      }
+      if (returnRequest.status !== "PENDING") {
+        return res.status(400).json({ message: `This request is already ${returnRequest.status.toLowerCase()}` });
+      }
+
+      const book = state.books.find((candidate) => candidate._id === returnRequest.bookId);
+      returnRequest.status = "DECLINED";
+      returnRequest.reviewedAt = nowIso();
+      returnRequest.reviewedBy = req.auth!.userId;
+      returnRequest.note = input.note || returnRequest.note;
+      notify(
+        state.notifications,
+        returnRequest.userId,
+        "Return Request Declined",
+        `${book?.title || "Your borrowed book"} return request was declined by the library team.`,
+      );
+      writeAudit(state.auditLogs, req.auth!.userId, "DECLINE_RETURN_REQUEST", "return_request", returnRequest._id, {
+        transactionId: returnRequest.transactionId,
+        bookId: returnRequest.bookId,
+      });
+      await writeState(state);
+      return res.json(returnRequest);
+    } catch (error) {
+      return res.status(400).json({ message: error instanceof Error ? error.message : "Unable to decline return request" });
+    }
   });
 
   app.post("/api/transactions/issue", requireAuth, requireRole(["admin", "librarian"]), async (req: AuthenticatedRequest, res) => {
@@ -1162,7 +1633,12 @@ export function registerRoutes(app: Express) {
         userId: user._id,
       });
       if (shouldUseDirectSupabasePersistence()) {
-        await persistIssueDirect(transaction, book, user, branch, matchingReservation, issueAudit);
+        try {
+          await persistIssueDirect(transaction, book, user, branch, matchingReservation, issueAudit);
+        } catch (error) {
+          console.warn("Direct issue persistence failed, falling back to writeState:", error instanceof Error ? error.message : error);
+          await writeState(state);
+        }
       } else {
         await writeState(state);
       }
@@ -1199,40 +1675,12 @@ export function registerRoutes(app: Express) {
       if (!book) {
         return res.status(404).json({ message: "Book not found" });
       }
-      const actorExists = state.users.some((candidate) => candidate._id === req.auth!.userId);
-
-      transaction.returnedAt = nowIso();
-      transaction.returnedTo = actorExists ? req.auth!.userId : undefined;
-      transaction.fineAmount = computeFine(transaction.dueDate);
-      transaction.status = "RETURNED";
-      book.availableCopies += 1;
-      normalizeBookCopies(book);
-      const returnAudit = writeAudit(state.auditLogs, req.auth!.userId, "RETURN_BOOK", "transaction", transaction._id, {
-        bookId: transaction.bookId,
-        userId: transaction.userId,
-        fineAmount: transaction.fineAmount,
-      });
-      const createdNotifications: Notification[] = [];
-      createdNotifications.push(
-        notify(state.notifications, transaction.userId, "Book Returned", `${book.title} has been returned successfully.`),
-      );
-
-      const nextReservation = state.reservations
-        .filter((reservation) => reservation.bookId === book._id && reservation.status === "WAITING")
-        .sort((a, b) => a.position - b.position)[0];
-
-      if (nextReservation) {
-        const queuedUser = state.users.find((candidate) => candidate._id === nextReservation.userId);
-        createdNotifications.push(...notifyStaff(
-          state,
-          "Reservation Needs Review",
-          `${book.title} was returned and ${queuedUser?.name || "a student"} has a pending request waiting for approval.`,
-        ));
-      }
+      const { returnAudit, createdNotifications } = processReturnApproval(state, transaction, req.auth!.userId);
 
       if (shouldUseDirectSupabasePersistence()) {
         const borrower = state.users.find((candidate) => candidate._id === transaction.userId);
         await persistReturnDirect(transaction, book, borrower, createdNotifications, returnAudit);
+        await writeState(state);
       } else {
         await writeState(state);
       }
@@ -1288,19 +1736,34 @@ export function registerRoutes(app: Express) {
 
     state.reservations.unshift(reservation);
     reindexReservationQueue(state.reservations, bookId);
-    notifyStaff(
+    const createdNotifications: Notification[] = [];
+    createdNotifications.push(...notifyStaff(
       state,
       "New Reservation Request",
       `${currentUser.name} requested ${book.title}. Review and approve or decline the request.`,
-    );
-    notify(
+    ));
+    createdNotifications.push(notify(
       state.notifications,
       currentUser._id,
       "Reservation Request Sent",
       `${book.title} has been sent for admin/librarian approval.`,
-    );
-    writeAudit(state.auditLogs, currentUser._id, "CREATE_RESERVATION", "reservation", reservation._id, { bookId });
-    await writeState(state);
+    ));
+    const auditLog = writeAudit(state.auditLogs, currentUser._id, "CREATE_RESERVATION", "reservation", reservation._id, { bookId });
+    if (shouldUseDirectSupabasePersistence()) {
+      try {
+        await persistReservationCreateDirect(
+          reservation,
+          state.reservations.filter((candidate) => candidate.bookId === bookId && candidate.status === "WAITING"),
+          createdNotifications,
+          auditLog,
+        );
+      } catch (error) {
+        console.warn("Direct reservation persistence failed, falling back to writeState:", error instanceof Error ? error.message : error);
+        await writeState(state);
+      }
+    } else {
+      await writeState(state);
+    }
     return res.status(201).json(reservation);
   });
 
@@ -1509,37 +1972,60 @@ export function registerRoutes(app: Express) {
   });
 
   app.delete("/api/notifications/:id", requireAuth, async (req: AuthenticatedRequest, res) => {
-    const state = await readState();
-    const safeUsers = state.users.map(publicUser);
-    const currentUser = currentUserOrThrow(req, safeUsers);
-    const notificationId = String(req.params.id);
-    const notification = state.notifications.find((candidate) => candidate._id === notificationId);
+    try {
+      const state = await readState();
+      const safeUsers = state.users.map(publicUser);
+      const currentUser = currentUserOrThrow(req, safeUsers);
+      const notificationId = String(req.params.id);
+      const notification = state.notifications.find((candidate) => candidate._id === notificationId);
 
-    if (!notification) {
-      return res.status(404).json({ message: "Notification not found" });
+      if (!notification) {
+        return res.status(404).json({ message: "Notification not found" });
+      }
+
+      const canDelete = isStaff(currentUser.role) || notification.userId === currentUser._id;
+      if (!canDelete) {
+        return res.status(403).json({ message: "You cannot delete this notification" });
+      }
+
+      state.notifications = state.notifications.filter((candidate) => candidate._id !== notificationId);
+
+      if (shouldUseDirectSupabasePersistence() && isUuid(notificationId)) {
+        await deleteNotificationDirect(notificationId);
+        return res.status(204).send();
+      }
+
+      await writeState(state);
+      return res.status(204).send();
+    } catch (error) {
+      return res.status(400).json({ message: error instanceof Error ? error.message : "Unable to delete notification" });
     }
-
-    const canDelete = isStaff(currentUser.role) || notification.userId === currentUser._id;
-    if (!canDelete) {
-      return res.status(403).json({ message: "You cannot delete this notification" });
-    }
-
-    state.notifications = state.notifications.filter((candidate) => candidate._id !== notificationId);
-    await writeState(state);
-    return res.status(204).send();
   });
 
   app.delete("/api/notifications", requireAuth, async (req: AuthenticatedRequest, res) => {
-    const state = await readState();
-    const safeUsers = state.users.map(publicUser);
-    const currentUser = currentUserOrThrow(req, safeUsers);
+    try {
+      const state = await readState();
+      const safeUsers = state.users.map(publicUser);
+      const currentUser = currentUserOrThrow(req, safeUsers);
 
-    state.notifications = isStaff(currentUser.role)
-      ? []
-      : state.notifications.filter((notification) => notification.userId !== currentUser._id);
+      state.notifications = isStaff(currentUser.role)
+        ? []
+        : state.notifications.filter((notification) => notification.userId !== currentUser._id);
 
-    await writeState(state);
-    return res.status(204).send();
+      if (shouldUseDirectSupabasePersistence() && isUuid(currentUser._id)) {
+        if (isStaff(currentUser.role)) {
+          await deleteAllNotificationsDirect();
+        } else {
+          await deleteNotificationsDirectForUser(currentUser._id);
+        }
+        return res.status(204).send();
+      }
+
+      await writeState(state);
+      return res.status(204).send();
+    } catch (error) {
+      return res.status(400).json({ message: error instanceof Error ? error.message : "Unable to delete notifications" });
+    }
   });
 
   app.get("/api/audit-logs", requireAuth, requireRole(["admin"]), async (_req, res) => {
