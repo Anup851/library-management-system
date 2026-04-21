@@ -385,6 +385,8 @@ function NotificationBell({ data, actions }: { data: any; actions: any }) {
   const { isStudent } = useAuth();
   const [open, setOpen] = useState(false);
   const [seenAlertIds, setSeenAlertIds] = useState<string[]>([]);
+  const bellRef = useRef<HTMLDivElement | null>(null);
+  const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
   const autoAlerts = useMemo(() => getAutoLoanAlerts(data.transactions, data.books), [data.transactions, data.books]);
   const manualAlerts = useMemo(() => data.notifications.map((notification: any) => ({
     id: notification._id,
@@ -407,10 +409,39 @@ function NotificationBell({ data, actions }: { data: any; actions: any }) {
     });
   }, [open, alertIds]);
 
+  useEffect(() => {
+    if (!open) return;
+
+    const updatePanelPosition = () => {
+      const trigger = bellRef.current;
+      if (!trigger) return;
+
+      const rect = trigger.getBoundingClientRect();
+      const panelWidth = Math.min(320, window.innerWidth - 24);
+      const left = Math.max(12, Math.min(rect.right - panelWidth, window.innerWidth - panelWidth - 12));
+
+      setPanelStyle({
+        position: "fixed",
+        top: rect.bottom + 8,
+        left,
+        width: panelWidth,
+      });
+    };
+
+    updatePanelPosition();
+    window.addEventListener("resize", updatePanelPosition);
+    window.addEventListener("scroll", updatePanelPosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updatePanelPosition);
+      window.removeEventListener("scroll", updatePanelPosition, true);
+    };
+  }, [open]);
+
   if (!isStudent) return null;
 
   return (
-    <div className="relative shrink-0">
+    <div ref={bellRef} className="relative shrink-0">
       <button
         type="button"
         aria-label="Open notifications"
@@ -426,7 +457,7 @@ function NotificationBell({ data, actions }: { data: any; actions: any }) {
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-14 z-30 w-[min(20rem,calc(100vw-1.5rem))] rounded-[1.5rem] border border-slate-200/80 bg-white/95 p-3 shadow-2xl backdrop-blur dark:border-white/10 dark:bg-slate-950/95">
+        <div style={panelStyle} className="z-30 rounded-[1.5rem] border border-slate-200/80 bg-white/95 p-3 shadow-2xl backdrop-blur dark:border-white/10 dark:bg-slate-950/95">
           <div className="mb-3 flex items-center justify-between px-2">
             <div>
               <p className="text-sm font-semibold">Notifications</p>
