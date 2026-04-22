@@ -510,7 +510,7 @@ function AppSearchBar({
   };
 
   return (
-    <div ref={containerRef} className={`relative w-full ${compact ? "max-w-none" : "max-w-2xl"}`}>
+    <div ref={containerRef} className={`relative w-full ${open ? "z-[90]" : "z-10"} ${compact ? "max-w-none" : "max-w-2xl"}`}>
       <div className={`flex w-full items-center gap-3 rounded-[1.5rem] bg-white/90 px-4 shadow-sm backdrop-blur dark:bg-slate-950/85 ${compact ? "py-2.5" : "py-3"}`}>
         <Search className="h-5 w-5 shrink-0 text-cyan-600 dark:text-cyan-300" />
         <Input
@@ -1807,8 +1807,8 @@ function Workspace() {
             animate="visible"
             className="mb-4 flex flex-col gap-3 md:mb-6 md:gap-4"
           >
-            <div className="md:hidden">
-              <div className="flex items-start gap-3 rounded-[1.5rem] border border-slate-200/80 bg-white/85 px-3 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-slate-950/90">
+            <div className="relative z-20 md:hidden">
+              <div className="relative z-20 flex items-start gap-3 rounded-[1.5rem] border border-slate-200/80 bg-white/85 px-3 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-slate-950/90">
                 <MobileSidebar
                   theme={theme}
                   baseTheme={baseTheme}
@@ -1827,7 +1827,7 @@ function Workspace() {
                 </div>
                 <NotificationBell data={data} actions={actions} />
               </div>
-              <div className="mt-3 rounded-[1.5rem] border border-slate-200/80 bg-white/80 px-4 py-4 shadow-sm dark:border-white/10 dark:bg-white/5">
+              <div className="relative z-0 mt-3 rounded-[1.5rem] border border-slate-200/80 bg-white/80 px-4 py-4 shadow-sm dark:border-white/10 dark:bg-white/5">
                 <AnimatedHeaderLogo />
               </div>
             </div>
