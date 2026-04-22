@@ -1045,11 +1045,10 @@ function Catalog({ data, canWrite, actions }: { data: any; canWrite: boolean; ac
     availableCopies: 1,
   });
   useEffect(() => {
-    const syncedSearch = sessionStorage.getItem("catalog-search");
-    if (syncedSearch && syncedSearch !== search) {
-      setSearch(syncedSearch);
+    if (sessionStorage.getItem("catalog-search")) {
+      sessionStorage.removeItem("catalog-search");
     }
-  }, [search]);
+  }, []);
 
   const filtered = data.books.filter((book: any) =>
     `${book.title} ${book.author} ${book.category} ${book.isbn} ${book.tags?.join(" ") || ""} ${book.description || ""} ${book.format || ""}`
@@ -1061,7 +1060,14 @@ function Catalog({ data, canWrite, actions }: { data: any; canWrite: boolean; ac
     <div className="space-y-6">
       <Card title="Catalog" text="Search books, manage inventory, and access digital resources.">
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search title, author, ISBN, tags, category" />
+          <div className="flex gap-2">
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search title, author, ISBN, tags, category" />
+            {search ? (
+              <Button variant="outline" onClick={() => setSearch("")}>
+                Clear
+              </Button>
+            ) : null}
+          </div>
           <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 px-4 py-3 text-xs text-slate-500 dark:border-white/10 dark:bg-slate-950/40 dark:text-slate-300 sm:text-sm">
             {filtered.length} result{filtered.length === 1 ? "" : "s"}
           </div>
@@ -1785,7 +1791,7 @@ function Workspace() {
     { href: "/", label: "Dashboard" },
     { href: "/catalog", label: "Catalog" },
     ...(isAdmin || isLibrarian ? [{ href: "/circulation", label: "Circulation" }] : []),
-    { href: "/recommendations", label: "Recommendations" },
+    ...(isStudent ? [{ href: "/recommendations", label: "Recommendations" }] : []),
     { href: "/assistant", label: "Assistant" },
     ...(isAdmin ? [{ href: "/members", label: "Members" }] : []),
     ...(isAdmin || isLibrarian ? [{ href: "/admin", label: isAdmin ? "Admin" : "Notifications" }] : []),
@@ -1807,33 +1813,31 @@ function Workspace() {
             animate="visible"
             className="mb-4 flex flex-col gap-3 md:mb-6 md:gap-4"
           >
-            <div className="relative z-20 space-y-3 md:hidden">
-              <div className="relative z-20 rounded-[1.5rem] border border-slate-200/80 bg-white/85 px-3 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-slate-950/90">
-                <div className="flex items-center gap-3">
-                  <MobileSidebar
-                    theme={theme}
-                    baseTheme={baseTheme}
-                    isFuturistic={isFuturistic}
-                    onToggleBaseTheme={() => setBaseTheme((currentTheme) => currentTheme === "dark" ? "light" : "dark")}
-                    onToggleFuturistic={() => setIsFuturistic((currentTheme) => !currentTheme)}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <AnimatedHeaderLogo />
-                  </div>
-                  <NotificationBell data={data} actions={actions} />
+            <div className="relative z-20 md:hidden">
+              <div className="relative z-20 flex items-start gap-3 rounded-[1.5rem] border border-slate-200/80 bg-white/85 px-3 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-slate-950/90">
+                <MobileSidebar
+                  theme={theme}
+                  baseTheme={baseTheme}
+                  isFuturistic={isFuturistic}
+                  onToggleBaseTheme={() => setBaseTheme((currentTheme) => currentTheme === "dark" ? "light" : "dark")}
+                  onToggleFuturistic={() => setIsFuturistic((currentTheme) => !currentTheme)}
+                />
+                <div className="min-w-0 flex-1">
+                  {location === "/" ? (
+                    <AppSearchBar
+                      data={data}
+                      nav={nav}
+                      onNavigate={navigateWithSearch}
+                      placeholder="Search books or sections"
+                      compact
+                    />
+                  ) : null}
                 </div>
+                <NotificationBell data={data} actions={actions} />
               </div>
-              {location === "/" ? (
-                <div className="relative z-20 rounded-[1.5rem] border border-slate-200/80 bg-white/85 px-3 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-slate-950/90">
-                  <AppSearchBar
-                    data={data}
-                    nav={nav}
-                    onNavigate={navigateWithSearch}
-                    placeholder="Search books or sections"
-                    compact
-                  />
-                </div>
-              ) : null}
+              <div className="relative z-0 mt-3 rounded-[1.5rem] border border-slate-200/80 bg-white/80 px-4 py-4 shadow-sm dark:border-white/10 dark:bg-white/5">
+                <AnimatedHeaderLogo />
+              </div>
             </div>
 
             <div className="hidden md:grid md:grid-cols-[auto_1fr_auto] md:items-start md:gap-6">
@@ -1856,16 +1860,18 @@ function Workspace() {
               </div>
             </div>
 
-            <div className="hidden md:flex md:justify-center">
-              <AppSearchBar data={data} nav={nav} onNavigate={navigateWithSearch} />
-            </div>
+            {location === "/" ? (
+              <div className="hidden md:flex md:justify-center">
+                <AppSearchBar data={data} nav={nav} onNavigate={navigateWithSearch} />
+              </div>
+            ) : null}
           </motion.div>
 
           <Switch>
             <Route path="/"><Dashboard data={data} actions={actions} /></Route>
             <Route path="/catalog"><Catalog data={data} canWrite={canWrite} actions={actions} /></Route>
             {isAdmin || isLibrarian ? <Route path="/circulation"><Circulation data={data} actions={actions} /></Route> : null}
-            <Route path="/recommendations"><Recommendations data={data} actions={actions} /></Route>
+            {isStudent ? <Route path="/recommendations"><Recommendations data={data} actions={actions} /></Route> : null}
             <Route path="/assistant"><Assistant data={data} actions={actions} /></Route>
             {isAdmin ? <Route path="/members"><Members data={data} actions={actions} /></Route> : null}
             {isAdmin || isLibrarian ? <Route path="/admin"><Admin data={data} actions={actions} /></Route> : null}

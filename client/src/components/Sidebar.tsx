@@ -35,13 +35,13 @@ type SidebarProps = {
 
 function SidebarNav({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?: () => void }) {
   const [location, setLocation] = useLocation();
-  const { isAdmin, isLibrarian } = useAuth();
+  const { isAdmin, isLibrarian, isStudent } = useAuth();
 
   const menu = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/" },
     { icon: Library, label: "Catalog", href: "/catalog" },
     ...(isAdmin || isLibrarian ? [{ icon: Library, label: "Circulation", href: "/circulation" }] : []),
-    { icon: Sparkles, label: "Recommendations", href: "/recommendations" },
+    ...(isStudent ? [{ icon: Sparkles, label: "Recommendations", href: "/recommendations" }] : []),
     { icon: Bot, label: "AI Assistant", href: "/assistant" },
     ...(isAdmin ? [{ icon: Users, label: "Members", href: "/members" }] : []),
     ...(isAdmin || isLibrarian ? [{ icon: ShieldCheck, label: isAdmin ? "Admin" : "Notifications", href: "/admin" }] : []),
