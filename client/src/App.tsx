@@ -347,7 +347,7 @@ type GlobalSearchResult = {
   query?: string;
 };
 
-function AnimatedHeaderLogo() {
+function AnimatedHeaderLogo({ showEyebrow = true }: { showEyebrow?: boolean }) {
   const [intro, setIntro] = useState(true);
 
   useEffect(() => {
@@ -371,8 +371,8 @@ function AnimatedHeaderLogo() {
       ) : null}
       <div className={`flex flex-col items-center justify-center text-center ${intro ? "header-logo-copy--reveal" : ""}`}>
         <div className={`header-logo-title-block ${intro ? "header-logo-title-block--reveal" : ""}`}>
-          <p className="text-[11px] uppercase tracking-[0.32em] text-cyan-600 dark:text-cyan-300 sm:text-xs">Library Workspace</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-[2.1rem]">Lib Connect Portal</h1>
+          {showEyebrow ? <p className="text-[11px] uppercase tracking-[0.32em] text-cyan-600 dark:text-cyan-300 sm:text-xs">Library Workspace</p> : null}
+          <h1 className={`${showEyebrow ? "mt-1" : ""} text-2xl font-semibold tracking-tight sm:text-[2.1rem]`}>Lib Connect Portal</h1>
         </div>
       </div>
     </div>
@@ -1814,7 +1814,7 @@ function Workspace() {
             className="mb-4 flex flex-col gap-3 md:mb-6 md:gap-4"
           >
             <div className="relative z-20 md:hidden">
-              <div className="relative z-20 flex items-start gap-3 rounded-[1.5rem] border border-slate-200/80 bg-white/85 px-3 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-slate-950/90">
+              <div className="relative z-20 flex items-center gap-3 rounded-[1.5rem] border border-slate-200/80 bg-white/85 px-3 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-slate-950/90">
                 <MobileSidebar
                   theme={theme}
                   baseTheme={baseTheme}
@@ -1823,20 +1823,18 @@ function Workspace() {
                   onToggleFuturistic={() => setIsFuturistic((currentTheme) => !currentTheme)}
                 />
                 <div className="min-w-0 flex-1">
-                  {location === "/" ? (
-                    <AppSearchBar
-                      data={data}
-                      nav={nav}
-                      onNavigate={navigateWithSearch}
-                      placeholder="Search books or sections"
-                      compact
-                    />
-                  ) : null}
+                  <AnimatedHeaderLogo showEyebrow={false} />
                 </div>
                 <NotificationBell data={data} actions={actions} />
               </div>
-              <div className="relative z-0 mt-3 rounded-[1.5rem] border border-slate-200/80 bg-white/80 px-4 py-4 shadow-sm dark:border-white/10 dark:bg-white/5">
-                <AnimatedHeaderLogo />
+              <div className="relative z-0 mt-3 rounded-[1.5rem] border border-slate-200/80 bg-white/80 px-3 py-3 shadow-sm dark:border-white/10 dark:bg-white/5">
+                <AppSearchBar
+                  data={data}
+                  nav={nav}
+                  onNavigate={navigateWithSearch}
+                  placeholder="Search books or sections"
+                  compact
+                />
               </div>
             </div>
 
@@ -1860,11 +1858,9 @@ function Workspace() {
               </div>
             </div>
 
-            {location === "/" ? (
-              <div className="hidden md:flex md:justify-center">
-                <AppSearchBar data={data} nav={nav} onNavigate={navigateWithSearch} />
-              </div>
-            ) : null}
+            <div className="hidden md:flex md:justify-center">
+              <AppSearchBar data={data} nav={nav} onNavigate={navigateWithSearch} />
+            </div>
           </motion.div>
 
           <Switch>
