@@ -154,7 +154,7 @@ export function MobileSidebar(props: SidebarProps) {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="mb-5 flex items-center justify-start rounded-[1.5rem] border border-slate-200/80 bg-white/85 px-4 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-slate-950/90 md:hidden">
+    <div className="flex items-center">
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
           <button

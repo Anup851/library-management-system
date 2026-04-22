@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, Route, Switch, useLocation } from "wouter";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Bell, ChevronLeft, ChevronRight } from "lucide-react";
+import { Bell, BookOpen, ChevronLeft, ChevronRight, Search, Users } from "lucide-react";
 import { motion } from "framer-motion";
 import { queryClient } from "./lib/queryClient";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -335,6 +335,234 @@ function Card({ title, text, children }: { title: string; text: string; children
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 sm:text-sm">{text}</p>
       <div className="mt-4 sm:mt-5">{children}</div>
     </motion.section>
+  );
+}
+
+type GlobalSearchResult = {
+  id: string;
+  title: string;
+  subtitle: string;
+  route: string;
+  kind: "section" | "book" | "member" | "shortcut";
+  query?: string;
+};
+
+function AnimatedHeaderLogo() {
+  const [intro, setIntro] = useState(true);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setIntro(false);
+    }, 2600);
+
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
+  return (
+    <div className="relative overflow-hidden">
+      {intro ? (
+        <>
+          <div className="header-logo-swoosh" aria-hidden="true" />
+          <div className="header-logo-orbit" aria-hidden="true">
+            <span className="header-logo-orbit-dot" />
+            <span className="header-logo-orbit-dot header-logo-orbit-dot--small" />
+          </div>
+        </>
+      ) : null}
+      <div className={`flex flex-col items-center justify-center text-center ${intro ? "header-logo-copy--reveal" : ""}`}>
+        <div className={`header-logo-title-block ${intro ? "header-logo-title-block--reveal" : ""}`}>
+          <p className="text-[11px] uppercase tracking-[0.32em] text-cyan-600 dark:text-cyan-300 sm:text-xs">Library Workspace</p>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-[2.1rem]">Lib Connect Portal</h1>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AppSearchBar({
+  data,
+  nav,
+  onNavigate,
+  placeholder = "Search books, members, categories, or sections",
+  compact = false,
+}: {
+  data: any;
+  nav: Array<{ href: string; label: string }>;
+  onNavigate: (route: string, query?: string) => void;
+  placeholder?: string;
+  compact?: boolean;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const normalizedQuery = query.trim().toLowerCase();
+  const availableRoutes = useMemo(() => new Set(nav.map((item) => item.href)), [nav]);
+
+  const results = useMemo(() => {
+    if (!normalizedQuery) return [];
+
+    const sectionResults: GlobalSearchResult[] = nav
+      .filter((item) => item.label.toLowerCase().includes(normalizedQuery))
+      .map((item) => ({
+        id: `section-${item.href}`,
+        title: item.label,
+        subtitle: "Open app section",
+        route: item.href,
+        kind: "section",
+      }));
+
+    const shortcutResults: GlobalSearchResult[] = [
+      {
+        id: "shortcut-digital",
+        title: "Digital books",
+        subtitle: "Jump to catalog results for eBooks and online reading",
+        route: "/catalog",
+        kind: "shortcut",
+        query: "digital ebook online",
+      },
+      {
+        id: "shortcut-overdue",
+        title: "Overdue activity",
+        subtitle: "Open circulation and review overdue records quickly",
+        route: "/circulation",
+        kind: "shortcut",
+        query: "overdue",
+      },
+      {
+        id: "shortcut-students",
+        title: "Student members",
+        subtitle: "Jump to member management for student accounts",
+        route: "/members",
+        kind: "shortcut",
+        query: "student",
+      },
+    ]
+      .filter((item) => availableRoutes.has(item.route))
+      .filter((item) => item.title.toLowerCase().includes(normalizedQuery) || item.subtitle.toLowerCase().includes(normalizedQuery));
+
+    const bookResults: GlobalSearchResult[] = data.books
+      .filter((book: any) =>
+        `${book.title} ${book.author} ${book.category} ${book.isbn} ${book.tags?.join(" ") || ""}`
+          .toLowerCase()
+          .includes(normalizedQuery),
+      )
+      .slice(0, 5)
+      .map((book: any) => ({
+        id: `book-${book._id}`,
+        title: book.title,
+        subtitle: `${book.author} • ${book.category} • ${book.availableCopies}/${book.totalCopies} available`,
+        route: "/catalog",
+        kind: "book",
+        query: book.title,
+      }));
+
+    const memberResults: GlobalSearchResult[] = (data.users || [])
+      .filter(() => availableRoutes.has("/members"))
+      .filter((user: any) =>
+        `${user.name} ${user.email} ${user.registrationNumber || ""} ${user.role}`.toLowerCase().includes(normalizedQuery),
+      )
+      .slice(0, 4)
+      .map((user: any) => ({
+        id: `member-${user._id}`,
+        title: user.name,
+        subtitle: `${user.role} • ${user.registrationNumber || user.email}`,
+        route: "/members",
+        kind: "member",
+        query: user.name,
+      }));
+
+    return [...sectionResults, ...shortcutResults, ...bookResults, ...memberResults].slice(0, 8);
+  }, [availableRoutes, data.books, data.users, nav, normalizedQuery]);
+
+  useEffect(() => {
+    const handleClick = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const runSearch = (result?: GlobalSearchResult) => {
+    const nextRoute = result?.route || "/catalog";
+    const nextQuery = result?.query || query.trim();
+
+    if (!nextQuery && nextRoute === "/catalog") {
+      onNavigate(nextRoute);
+      setOpen(false);
+      return;
+    }
+
+    onNavigate(nextRoute, nextQuery || undefined);
+    setOpen(false);
+  };
+
+  const iconForResult = (kind: GlobalSearchResult["kind"]) => {
+    if (kind === "member") return <Users className="h-4 w-4" />;
+    return <BookOpen className="h-4 w-4" />;
+  };
+
+  return (
+    <div ref={containerRef} className={`relative w-full ${compact ? "max-w-none" : "max-w-2xl"}`}>
+      <div className={`flex w-full items-center gap-3 rounded-[1.5rem] bg-white/90 px-4 shadow-sm backdrop-blur dark:bg-slate-950/85 ${compact ? "py-2.5" : "py-3"}`}>
+        <Search className="h-5 w-5 shrink-0 text-cyan-600 dark:text-cyan-300" />
+        <Input
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              runSearch();
+            }
+          }}
+          placeholder={placeholder}
+          className={`h-auto w-full border-0 bg-transparent px-0 py-0 shadow-none outline-none ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 dark:bg-transparent ${compact ? "text-sm" : "text-sm sm:text-base"}`}
+        />
+        <Button
+          size="sm"
+          className={`rounded-xl ${compact ? "px-3" : "px-4"}`}
+          disabled={!query.trim()}
+          onClick={() => runSearch()}
+        >
+          {compact ? "Go" : "Search"}
+        </Button>
+      </div>
+
+      {open ? (
+        <div className="absolute left-0 right-0 top-[calc(100%+0.75rem)] z-40 overflow-hidden rounded-[1.5rem] border border-slate-200/80 bg-white/95 shadow-2xl backdrop-blur dark:border-white/10 dark:bg-slate-950/95">
+          {results.length > 0 ? (
+            <div className="max-h-[22rem] overflow-y-auto p-2">
+              {results.map((result) => (
+                <button
+                  key={result.id}
+                  type="button"
+                  className="flex w-full items-start gap-3 rounded-[1.1rem] px-3 py-3 text-left transition hover:bg-cyan-50 dark:hover:bg-white/5"
+                  onClick={() => runSearch(result)}
+                >
+                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-700 dark:text-cyan-200">
+                    {iconForResult(result.kind)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium sm:text-[15px]">{result.title}</p>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 sm:text-sm">{result.subtitle}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="p-4 text-sm text-slate-500 dark:text-slate-400">
+              No direct matches yet. Press Enter to search the catalog for “{query.trim() || "your keywords"}”.
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -793,7 +1021,7 @@ function DashboardHeroSlider() {
 }
 
 function Catalog({ data, canWrite, actions }: { data: any; canWrite: boolean; actions: any }) {
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => sessionStorage.getItem("catalog-search") || "");
   const [form, setForm] = useState({
     title: "",
     author: "",
@@ -811,12 +1039,28 @@ function Catalog({ data, canWrite, actions }: { data: any; canWrite: boolean; ac
     totalCopies: 1,
     availableCopies: 1,
   });
-  const filtered = data.books.filter((book: any) => `${book.title} ${book.author} ${book.category} ${book.isbn}`.toLowerCase().includes(search.toLowerCase()));
+  useEffect(() => {
+    const syncedSearch = sessionStorage.getItem("catalog-search");
+    if (syncedSearch && syncedSearch !== search) {
+      setSearch(syncedSearch);
+    }
+  }, [search]);
+
+  const filtered = data.books.filter((book: any) =>
+    `${book.title} ${book.author} ${book.category} ${book.isbn} ${book.tags?.join(" ") || ""} ${book.description || ""} ${book.format || ""}`
+      .toLowerCase()
+      .includes(search.toLowerCase()),
+  );
 
   return (
     <div className="space-y-6">
       <Card title="Catalog" text="Search books, manage inventory, and access digital resources.">
-        <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search title, author, ISBN" />
+        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search title, author, ISBN, tags, category" />
+          <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 px-4 py-3 text-xs text-slate-500 dark:border-white/10 dark:bg-slate-950/40 dark:text-slate-300 sm:text-sm">
+            {filtered.length} result{filtered.length === 1 ? "" : "s"}
+          </div>
+        </div>
         <div className="mt-4 max-h-[38rem] overflow-y-auto pr-1 sm:mt-5 sm:max-h-[42rem]">
           <div className="grid gap-4 lg:grid-cols-2">
           {filtered.map((book: any) => (
@@ -859,6 +1103,11 @@ function Catalog({ data, canWrite, actions }: { data: any; canWrite: boolean; ac
             </div>
           ))}
           </div>
+          {filtered.length === 0 ? (
+            <div className="rounded-[1.5rem] border border-dashed border-slate-300/80 p-5 text-sm text-slate-500 dark:border-white/10 dark:text-slate-400">
+              No books matched your search. Try a title, author, category, tag, or ISBN.
+            </div>
+          ) : null}
         </div>
       </Card>
       {canWrite ? (
@@ -1497,6 +1746,18 @@ function Workspace() {
     if (location === "/auth/login") setLocation("/");
   }, [location, setLocation]);
 
+  const navigateWithSearch = (route: string, query?: string) => {
+    if (route === "/catalog") {
+      if (query) {
+        sessionStorage.setItem("catalog-search", query);
+      } else {
+        sessionStorage.removeItem("catalog-search");
+      }
+    }
+
+    setLocation(route);
+  };
+
   if (location === "/auth/callback") return <AuthCallbackScreen />;
   if (isLoading) return <div className="flex min-h-screen items-center justify-center bg-slate-950 text-white">Loading...</div>;
   if (!user) return <LoginScreen />;
@@ -1535,47 +1796,59 @@ function Workspace() {
     >
       <main className="min-h-screen p-3 sm:p-4 md:p-8">
         <div className="mx-auto max-w-7xl">
-          <MobileSidebar
-            theme={theme}
-            baseTheme={baseTheme}
-            isFuturistic={isFuturistic}
-            onToggleBaseTheme={() => setBaseTheme((currentTheme) => currentTheme === "dark" ? "light" : "dark")}
-            onToggleFuturistic={() => setIsFuturistic((currentTheme) => !currentTheme)}
-          />
           <motion.div
             variants={scrollReveal}
             initial="hidden"
             animate="visible"
-            className="mb-4 flex flex-col gap-3 md:mb-6 md:flex-row md:items-end md:justify-between md:gap-4"
+            className="mb-4 flex flex-col gap-3 md:mb-6 md:gap-4"
           >
-            <div className="flex items-start gap-3">
-              <div className="hidden md:block">
-                <Sidebar
+            <div className="md:hidden">
+              <div className="flex items-center gap-3 rounded-[1.5rem] border border-slate-200/80 bg-white/85 px-3 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-slate-950/90">
+                <MobileSidebar
                   theme={theme}
                   baseTheme={baseTheme}
                   isFuturistic={isFuturistic}
                   onToggleBaseTheme={() => setBaseTheme((currentTheme) => currentTheme === "dark" ? "light" : "dark")}
                   onToggleFuturistic={() => setIsFuturistic((currentTheme) => !currentTheme)}
                 />
+                <div className="min-w-0 flex-1">
+                  <AppSearchBar
+                    data={data}
+                    nav={nav}
+                    onNavigate={navigateWithSearch}
+                    placeholder="Search books or sections"
+                    compact
+                  />
+                </div>
+                <NotificationBell data={data} actions={actions} />
               </div>
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.28em] text-cyan-600 dark:text-cyan-300 sm:text-sm sm:tracking-[0.35em]">Lib Connect</p>
-                <h1 className="mt-1.5 text-2xl font-semibold tracking-tight sm:mt-2 sm:text-4xl">Lib Connect Portal</h1>
-                <p className="mt-1.5 max-w-3xl text-sm text-slate-600 dark:text-slate-300 sm:mt-2 sm:text-base">
-                  A modern full-stack workspace for books, students, circulation, reservations, and digital reading.
-                </p>
+              <div className="mt-3 rounded-[1.5rem] border border-slate-200/80 bg-white/80 px-4 py-4 shadow-sm dark:border-white/10 dark:bg-white/5">
+                <AnimatedHeaderLogo />
               </div>
             </div>
-            <div className="flex w-full items-center justify-between gap-3 md:w-auto md:justify-end">
-              <div className="hidden md:block">
+
+            <div className="hidden md:grid md:grid-cols-[auto_1fr_auto] md:items-start md:gap-6">
+              <div className="flex items-start gap-3">
+                <div>
+                  <Sidebar
+                    theme={theme}
+                    baseTheme={baseTheme}
+                    isFuturistic={isFuturistic}
+                    onToggleBaseTheme={() => setBaseTheme((currentTheme) => currentTheme === "dark" ? "light" : "dark")}
+                    onToggleFuturistic={() => setIsFuturistic((currentTheme) => !currentTheme)}
+                  />
+                </div>
+              </div>
+              <div className="flex justify-center">
+                <AnimatedHeaderLogo />
+              </div>
+              <div className="flex justify-end">
                 <NotificationBell data={data} actions={actions} />
               </div>
-              <select value={location} onChange={(e) => setLocation(e.target.value)} className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-4 py-3 md:hidden dark:border-white/10 dark:bg-slate-950">
-                {nav.map((item) => <option key={item.href} value={item.href}>{item.label}</option>)}
-              </select>
-              <div className="ml-auto md:hidden">
-                <NotificationBell data={data} actions={actions} />
-              </div>
+            </div>
+
+            <div className="hidden md:flex md:justify-center">
+              <AppSearchBar data={data} nav={nav} onNavigate={navigateWithSearch} />
             </div>
           </motion.div>
 
