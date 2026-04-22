@@ -144,11 +144,25 @@ type AuditLogRow = {
 const DATA_PATH = path.resolve(process.cwd(), "server", "data", "library-db.json");
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const STATE_CACHE_TTL_MS = Math.max(250, Number(process.env.STATE_CACHE_TTL_MS || 1000));
 
 let supabaseClient: SupabaseClient | null = null;
+let stateCache: { value: LibraryState; expiresAt: number } | null = null;
+let stateReadPromise: Promise<LibraryState> | null = null;
 
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function cloneState(state: LibraryState): LibraryState {
+  return structuredClone(state);
+}
+
+function setStateCache(state: LibraryState, ttlMs = STATE_CACHE_TTL_MS) {
+  stateCache = {
+    value: cloneState(state),
+    expiresAt: Date.now() + ttlMs,
+  };
 }
 
 function getSupabaseClient() {
@@ -626,39 +640,65 @@ async function writeSupabaseState(client: SupabaseClient, state: LibraryState) {
 }
 
 export async function readState(): Promise<LibraryState> {
-  const client = getSupabaseClient();
-  if (!client) {
-    return ensureFileSeed();
+  if (stateCache && stateCache.expiresAt > Date.now()) {
+    return cloneState(stateCache.value);
   }
 
-  const [profiles, branches, bookRows, bookBranches, transactionRows, reservationRows, returnRequestRows, reviewRows, notificationRows, auditLogRows] =
-    await Promise.all([
-      selectAll<ProfileRow>(client, "profiles"),
-      selectAll<BranchRow>(client, "branches"),
-      selectAll<BookRow>(client, "books"),
-      selectAll<BookBranchRow>(client, "book_branches"),
-      selectAll<TransactionRow>(client, "transactions"),
-      selectAll<ReservationRow>(client, "reservations"),
-      selectAll<ReturnRequestRow>(client, "return_requests"),
-      selectAll<ReviewRow>(client, "reviews"),
-      selectAll<NotificationRow>(client, "notifications"),
-      selectAll<AuditLogRow>(client, "audit_logs"),
-    ]);
+  if (stateReadPromise) {
+    return cloneState(await stateReadPromise);
+  }
 
-  const transactions = transactionRows.map(mapTransaction);
-  const reviews = reviewRows.map(mapReview);
+  const client = getSupabaseClient();
+  if (!client) {
+    stateReadPromise = ensureFileSeed();
+    try {
+      const state = await stateReadPromise;
+      setStateCache(state);
+      return cloneState(state);
+    } finally {
+      stateReadPromise = null;
+    }
+  }
 
-  return {
-    users: profiles.map((profile) => mapProfile(profile, transactionRows)),
-    branches: branches.map(mapBranch),
-    books: bookRows.map((book) => mapBook(book, bookBranches, reviews)),
-    transactions,
-    reservations: reservationRows.map(mapReservation),
-    returnRequests: returnRequestRows.map(mapReturnRequest),
-    reviews,
-    notifications: notificationRows.map(mapNotification),
-    auditLogs: auditLogRows.map(mapAuditLog),
-  };
+  stateReadPromise = (async () => {
+    const [profiles, branches, bookRows, bookBranches, transactionRows, reservationRows, returnRequestRows, reviewRows, notificationRows, auditLogRows] =
+      await Promise.all([
+        selectAll<ProfileRow>(client, "profiles"),
+        selectAll<BranchRow>(client, "branches"),
+        selectAll<BookRow>(client, "books"),
+        selectAll<BookBranchRow>(client, "book_branches"),
+        selectAll<TransactionRow>(client, "transactions"),
+        selectAll<ReservationRow>(client, "reservations"),
+        selectAll<ReturnRequestRow>(client, "return_requests"),
+        selectAll<ReviewRow>(client, "reviews"),
+        selectAll<NotificationRow>(client, "notifications"),
+        selectAll<AuditLogRow>(client, "audit_logs"),
+      ]);
+
+    const transactions = transactionRows.map(mapTransaction);
+    const reviews = reviewRows.map(mapReview);
+
+    const state = {
+      users: profiles.map((profile) => mapProfile(profile, transactionRows)),
+      branches: branches.map(mapBranch),
+      books: bookRows.map((book) => mapBook(book, bookBranches, reviews)),
+      transactions,
+      reservations: reservationRows.map(mapReservation),
+      returnRequests: returnRequestRows.map(mapReturnRequest),
+      reviews,
+      notifications: notificationRows.map(mapNotification),
+      auditLogs: auditLogRows.map(mapAuditLog),
+    };
+
+    setStateCache(state);
+    return state;
+  })();
+
+  try {
+    return cloneState(await stateReadPromise);
+  } finally {
+    stateReadPromise = null;
+  }
 }
 
 export async function writeState(state: LibraryState) {
@@ -666,10 +706,21 @@ export async function writeState(state: LibraryState) {
   if (!client) {
     await fs.mkdir(path.dirname(DATA_PATH), { recursive: true });
     await fs.writeFile(DATA_PATH, JSON.stringify(state, null, 2));
+    setStateCache(state);
     return;
   }
 
   await writeSupabaseState(client, state);
+  setStateCache(state);
+}
+
+export function primeStateCache(state: LibraryState) {
+  setStateCache(state);
+}
+
+export function invalidateStateCache() {
+  stateCache = null;
+  stateReadPromise = null;
 }
 
 export function publicUser(user: StoredUser): User {

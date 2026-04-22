@@ -25,7 +25,7 @@ import {
   type User,
 } from "@shared/schema";
 import { requireAuth, requireRole, signToken, type AuthenticatedRequest } from "./auth";
-import { isStaff, publicUser, readState, writeState } from "./store";
+import { isStaff, primeStateCache, publicUser, readState, writeState } from "./store";
 
 const DAILY_FINE = Number(process.env.DAILY_FINE || 5);
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -1535,7 +1535,7 @@ export function registerRoutes(app: Express) {
 
       if (shouldUseDirectSupabasePersistence()) {
         await persistReturnDirect(transaction, book, borrower, createdNotifications, returnAudit);
-        await writeState(state);
+        primeStateCache(state);
       } else {
         await writeState(state);
       }
@@ -1635,6 +1635,7 @@ export function registerRoutes(app: Express) {
       if (shouldUseDirectSupabasePersistence()) {
         try {
           await persistIssueDirect(transaction, book, user, branch, matchingReservation, issueAudit);
+          primeStateCache(state);
         } catch (error) {
           console.warn("Direct issue persistence failed, falling back to writeState:", error instanceof Error ? error.message : error);
           await writeState(state);
@@ -1680,7 +1681,7 @@ export function registerRoutes(app: Express) {
       if (shouldUseDirectSupabasePersistence()) {
         const borrower = state.users.find((candidate) => candidate._id === transaction.userId);
         await persistReturnDirect(transaction, book, borrower, createdNotifications, returnAudit);
-        await writeState(state);
+        primeStateCache(state);
       } else {
         await writeState(state);
       }
@@ -1757,6 +1758,7 @@ export function registerRoutes(app: Express) {
           createdNotifications,
           auditLog,
         );
+        primeStateCache(state);
       } catch (error) {
         console.warn("Direct reservation persistence failed, falling back to writeState:", error instanceof Error ? error.message : error);
         await writeState(state);
@@ -1805,6 +1807,7 @@ export function registerRoutes(app: Express) {
           [notification],
           auditLog,
         );
+        primeStateCache(state);
       } else {
         await writeState(state);
       }
@@ -1851,6 +1854,7 @@ export function registerRoutes(app: Express) {
           [notification],
           auditLog,
         );
+        primeStateCache(state);
       } else {
         await writeState(state);
       }
@@ -1992,6 +1996,7 @@ export function registerRoutes(app: Express) {
 
       if (shouldUseDirectSupabasePersistence() && isUuid(notificationId)) {
         await deleteNotificationDirect(notificationId);
+        primeStateCache(state);
         return res.status(204).send();
       }
 
@@ -2018,6 +2023,7 @@ export function registerRoutes(app: Express) {
         } else {
           await deleteNotificationsDirectForUser(currentUser._id);
         }
+        primeStateCache(state);
         return res.status(204).send();
       }
 
