@@ -479,31 +479,6 @@ function AppSearchBar({
     return [...sectionResults, ...matchingShortcutResults, ...bookResults, ...memberResults].slice(0, 8);
   }, [data.books, data.users, nav, normalizedQuery, shortcutResults]);
 
-  const recommendedResults = useMemo(() => {
-    const sectionRecommendations: GlobalSearchResult[] = nav.slice(0, 4).map((item) => ({
-      id: `recommended-section-${item.href}`,
-      title: item.label,
-      subtitle: "Open app section",
-      route: item.href,
-      kind: "section",
-    }));
-
-    const featuredBooks = (data.recommendations?.length ? data.recommendations : data.books)
-      .slice(0, 3)
-      .map((book: any) => ({
-        id: `recommended-book-${book._id}`,
-        title: book.title,
-        subtitle: `${book.author} - ${book.category}`,
-        route: "/catalog",
-        kind: "book" as const,
-        query: book.title,
-      }));
-
-    return [...sectionRecommendations, ...shortcutResults, ...featuredBooks].slice(0, 6);
-  }, [data.books, data.recommendations, nav, shortcutResults]);
-
-  const visibleResults = normalizedQuery ? results : recommendedResults;
-
   useEffect(() => {
     const handleClick = (event: MouseEvent) => {
       if (!containerRef.current?.contains(event.target as Node)) {
@@ -564,11 +539,11 @@ function AppSearchBar({
         </Button>
       </div>
 
-      {open && (visibleResults.length > 0 || !!normalizedQuery) ? (
-        <div className="mt-3 overflow-hidden rounded-[1.5rem] border border-slate-200/80 bg-white/95 shadow-2xl backdrop-blur dark:border-white/10 dark:bg-slate-950/95 md:absolute md:left-0 md:right-0 md:top-[calc(100%+0.75rem)] md:mt-0 md:z-40">
-          {visibleResults.length > 0 ? (
+      {open && !!normalizedQuery ? (
+        <div className="absolute left-0 right-0 top-[calc(100%+0.75rem)] z-[70] overflow-hidden rounded-[1.5rem] border border-slate-200/80 bg-white/95 shadow-2xl backdrop-blur dark:border-white/10 dark:bg-slate-950/95">
+          {results.length > 0 ? (
             <div className="max-h-[22rem] overflow-y-auto p-2">
-              {visibleResults.map((result) => (
+              {results.map((result) => (
                 <button
                   key={result.id}
                   type="button"
