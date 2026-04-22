@@ -1807,16 +1807,24 @@ function Workspace() {
             animate="visible"
             className="mb-4 flex flex-col gap-3 md:mb-6 md:gap-4"
           >
-            <div className="relative z-20 md:hidden">
-              <div className="relative z-20 flex items-start gap-3 rounded-[1.5rem] border border-slate-200/80 bg-white/85 px-3 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-slate-950/90">
-                <MobileSidebar
-                  theme={theme}
-                  baseTheme={baseTheme}
-                  isFuturistic={isFuturistic}
-                  onToggleBaseTheme={() => setBaseTheme((currentTheme) => currentTheme === "dark" ? "light" : "dark")}
-                  onToggleFuturistic={() => setIsFuturistic((currentTheme) => !currentTheme)}
-                />
-                <div className="min-w-0 flex-1">
+            <div className="relative z-20 space-y-3 md:hidden">
+              <div className="relative z-20 rounded-[1.5rem] border border-slate-200/80 bg-white/85 px-3 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-slate-950/90">
+                <div className="flex items-center gap-3">
+                  <MobileSidebar
+                    theme={theme}
+                    baseTheme={baseTheme}
+                    isFuturistic={isFuturistic}
+                    onToggleBaseTheme={() => setBaseTheme((currentTheme) => currentTheme === "dark" ? "light" : "dark")}
+                    onToggleFuturistic={() => setIsFuturistic((currentTheme) => !currentTheme)}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <AnimatedHeaderLogo />
+                  </div>
+                  <NotificationBell data={data} actions={actions} />
+                </div>
+              </div>
+              {location === "/" ? (
+                <div className="relative z-20 rounded-[1.5rem] border border-slate-200/80 bg-white/85 px-3 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-slate-950/90">
                   <AppSearchBar
                     data={data}
                     nav={nav}
@@ -1825,11 +1833,7 @@ function Workspace() {
                     compact
                   />
                 </div>
-                <NotificationBell data={data} actions={actions} />
-              </div>
-              <div className="relative z-0 mt-3 rounded-[1.5rem] border border-slate-200/80 bg-white/80 px-4 py-4 shadow-sm dark:border-white/10 dark:bg-white/5">
-                <AnimatedHeaderLogo />
-              </div>
+              ) : null}
             </div>
 
             <div className="hidden md:grid md:grid-cols-[auto_1fr_auto] md:items-start md:gap-6">
