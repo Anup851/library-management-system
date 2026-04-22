@@ -398,6 +398,37 @@ function AppSearchBar({
   const normalizedQuery = query.trim().toLowerCase();
   const availableRoutes = useMemo(() => new Set(nav.map((item) => item.href)), [nav]);
 
+  const shortcutResults = useMemo(
+    () =>
+      [
+        {
+          id: "shortcut-digital",
+          title: "Digital books",
+          subtitle: "Jump to catalog results for eBooks and online reading",
+          route: "/catalog",
+          kind: "shortcut" as const,
+          query: "digital ebook online",
+        },
+        {
+          id: "shortcut-overdue",
+          title: "Overdue activity",
+          subtitle: "Open circulation and review overdue records quickly",
+          route: "/circulation",
+          kind: "shortcut" as const,
+          query: "overdue",
+        },
+        {
+          id: "shortcut-students",
+          title: "Student members",
+          subtitle: "Jump to member management for student accounts",
+          route: "/members",
+          kind: "shortcut" as const,
+          query: "student",
+        },
+      ].filter((item) => availableRoutes.has(item.route)),
+    [availableRoutes],
+  );
+
   const results = useMemo(() => {
     if (!normalizedQuery) return [];
 
@@ -408,36 +439,10 @@ function AppSearchBar({
         title: item.label,
         subtitle: "Open app section",
         route: item.href,
-        kind: "section",
-      }));
+          kind: "section",
+        }));
 
-    const shortcutResults: GlobalSearchResult[] = [
-      {
-        id: "shortcut-digital",
-        title: "Digital books",
-        subtitle: "Jump to catalog results for eBooks and online reading",
-        route: "/catalog",
-        kind: "shortcut",
-        query: "digital ebook online",
-      },
-      {
-        id: "shortcut-overdue",
-        title: "Overdue activity",
-        subtitle: "Open circulation and review overdue records quickly",
-        route: "/circulation",
-        kind: "shortcut",
-        query: "overdue",
-      },
-      {
-        id: "shortcut-students",
-        title: "Student members",
-        subtitle: "Jump to member management for student accounts",
-        route: "/members",
-        kind: "shortcut",
-        query: "student",
-      },
-    ]
-      .filter((item) => availableRoutes.has(item.route))
+    const matchingShortcutResults: GlobalSearchResult[] = shortcutResults
       .filter((item) => item.title.toLowerCase().includes(normalizedQuery) || item.subtitle.toLowerCase().includes(normalizedQuery));
 
     const bookResults: GlobalSearchResult[] = data.books
@@ -450,7 +455,7 @@ function AppSearchBar({
       .map((book: any) => ({
         id: `book-${book._id}`,
         title: book.title,
-        subtitle: `${book.author} • ${book.category} • ${book.availableCopies}/${book.totalCopies} available`,
+        subtitle: `${book.author} - ${book.category} - ${book.availableCopies}/${book.totalCopies} available`,
         route: "/catalog",
         kind: "book",
         query: book.title,
@@ -465,14 +470,39 @@ function AppSearchBar({
       .map((user: any) => ({
         id: `member-${user._id}`,
         title: user.name,
-        subtitle: `${user.role} • ${user.registrationNumber || user.email}`,
+        subtitle: `${user.role} - ${user.registrationNumber || user.email}`,
         route: "/members",
         kind: "member",
         query: user.name,
       }));
 
-    return [...sectionResults, ...shortcutResults, ...bookResults, ...memberResults].slice(0, 8);
-  }, [availableRoutes, data.books, data.users, nav, normalizedQuery]);
+    return [...sectionResults, ...matchingShortcutResults, ...bookResults, ...memberResults].slice(0, 8);
+  }, [data.books, data.users, nav, normalizedQuery, shortcutResults]);
+
+  const recommendedResults = useMemo(() => {
+    const sectionRecommendations: GlobalSearchResult[] = nav.slice(0, 4).map((item) => ({
+      id: `recommended-section-${item.href}`,
+      title: item.label,
+      subtitle: "Open app section",
+      route: item.href,
+      kind: "section",
+    }));
+
+    const featuredBooks = (data.recommendations?.length ? data.recommendations : data.books)
+      .slice(0, 3)
+      .map((book: any) => ({
+        id: `recommended-book-${book._id}`,
+        title: book.title,
+        subtitle: `${book.author} - ${book.category}`,
+        route: "/catalog",
+        kind: "book" as const,
+        query: book.title,
+      }));
+
+    return [...sectionRecommendations, ...shortcutResults, ...featuredBooks].slice(0, 6);
+  }, [data.books, data.recommendations, nav, shortcutResults]);
+
+  const visibleResults = normalizedQuery ? results : recommendedResults;
 
   useEffect(() => {
     const handleClick = (event: MouseEvent) => {
@@ -534,11 +564,11 @@ function AppSearchBar({
         </Button>
       </div>
 
-      {open ? (
-        <div className="absolute left-0 right-0 top-[calc(100%+0.75rem)] z-40 overflow-hidden rounded-[1.5rem] border border-slate-200/80 bg-white/95 shadow-2xl backdrop-blur dark:border-white/10 dark:bg-slate-950/95">
-          {results.length > 0 ? (
+      {open && (visibleResults.length > 0 || !!normalizedQuery) ? (
+        <div className="mt-3 overflow-hidden rounded-[1.5rem] border border-slate-200/80 bg-white/95 shadow-2xl backdrop-blur dark:border-white/10 dark:bg-slate-950/95 md:absolute md:left-0 md:right-0 md:top-[calc(100%+0.75rem)] md:mt-0 md:z-40">
+          {visibleResults.length > 0 ? (
             <div className="max-h-[22rem] overflow-y-auto p-2">
-              {results.map((result) => (
+              {visibleResults.map((result) => (
                 <button
                   key={result.id}
                   type="button"
@@ -557,7 +587,7 @@ function AppSearchBar({
             </div>
           ) : (
             <div className="p-4 text-sm text-slate-500 dark:text-slate-400">
-              No direct matches yet. Press Enter to search the catalog for “{query.trim() || "your keywords"}”.
+              No direct matches yet. Press Enter to search the catalog for "{query.trim()}".
             </div>
           )}
         </div>
@@ -1803,7 +1833,7 @@ function Workspace() {
             className="mb-4 flex flex-col gap-3 md:mb-6 md:gap-4"
           >
             <div className="md:hidden">
-              <div className="flex items-center gap-3 rounded-[1.5rem] border border-slate-200/80 bg-white/85 px-3 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-slate-950/90">
+              <div className="flex items-start gap-3 rounded-[1.5rem] border border-slate-200/80 bg-white/85 px-3 py-3 shadow-sm backdrop-blur dark:border-white/10 dark:bg-slate-950/90">
                 <MobileSidebar
                   theme={theme}
                   baseTheme={baseTheme}
